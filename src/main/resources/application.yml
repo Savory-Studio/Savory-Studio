@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: apg-api
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/SavoryStudio?useSSL=false&serverTimezone=America/Bogota&allowPublicKeyRetrieval=true
+    username: root
+    password: ${DB_PASSWORD:tu_password_aqui}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
