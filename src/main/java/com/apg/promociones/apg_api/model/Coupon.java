@@ -29,6 +29,7 @@ public class Coupon {
     private Discount discount;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.ColumnTransformer(write = "?::coupon_status_enum")
     @Column(name = "coupon_status", nullable = false)
     private CouponStatus status;
 
