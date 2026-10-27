@@ -33,6 +33,7 @@ public class Discount {
     private String name;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.ColumnTransformer(write = "?::discount_status_enum")
     @Column(name = "discount_status", nullable = false)
     private DiscountStatus status;
 
@@ -40,6 +41,7 @@ public class Discount {
     private String applicableProducts;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.ColumnTransformer(write = "?::discount_type_enum")
     @Column(name = "discount_type", nullable = false)
     private DiscountType type;
 
