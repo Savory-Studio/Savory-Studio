@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class CanjeResponse {
 
     private Integer couponId;
+    private String couponHash;
     private String status;
     private LocalDateTime redemptionTimestamp;
     private String message;
