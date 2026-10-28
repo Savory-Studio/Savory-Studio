@@ -9,6 +9,13 @@ import org.springframework.web.bind.annotation.*;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // 400 Bad Request — custom validation errors (RN-06, RN-08, RN-09, etc.)
+    @ExceptionHandler(BadRequestException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleBadRequest(BadRequestException ex) {
+        return new ErrorResponse(400, ex.getMessage());
+    }
+
     // 409 Conflict — business rule violations (RN-01 to RN-05)
     @ExceptionHandler(BusinessRuleException.class)
     @ResponseStatus(HttpStatus.CONFLICT)
