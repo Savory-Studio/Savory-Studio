@@ -22,4 +22,9 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer> {
             ":#{#discount.id} AND c.coupon_status = CAST(:#{#status.name()} " +
             "AS coupon_status_enum)", nativeQuery = true)
     long countByDiscountAndStatus(Discount discount, CouponStatus status);
+
+    @Query(value = "SELECT EXISTS (SELECT 1 FROM coupon c WHERE c.user_id = :userId " +
+            "AND c.discount_id = :discountId AND c.coupon_status = " +
+            "CAST('UNUSED' AS coupon_status_enum))", nativeQuery = true)
+    boolean existsUnusedByUserAndDiscount(Integer userId, Integer discountId);
 }

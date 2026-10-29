@@ -23,7 +23,7 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(409, ex.getMessage());
     }
 
-    // 404 Not Found — coupon does not exist
+    // 404 Not Found — coupon, user or promotion does not exist
     @ExceptionHandler(ResourceNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ErrorResponse handleNotFound(ResourceNotFoundException ex) {
