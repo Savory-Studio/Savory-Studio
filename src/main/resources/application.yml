@@ -1,0 +1,24 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: apg-api
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://aws-0-us-east-1.pooler.supabase.com:6543/postgres?sslmode=require&prepareThreshold=0}
+    username: ${DB_USER:postgres.fklmbyqcsdrroppajnyo}
+    password: ${DB_PASSWORD:IXTjuN5EpM0k2DxB}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
