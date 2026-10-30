@@ -59,7 +59,7 @@ class AssociatePromotionServiceTest {
                 .startTimestamp(LocalDateTime.now().minusDays(1))
                 .endTimestamp(LocalDateTime.now().plusDays(7))
                 .build();
-        request = new AssociatePromotionRequest(10, 20);
+        request = new AssociatePromotionRequest(20);
     }
 
     @Test
@@ -73,7 +73,7 @@ class AssociatePromotionServiceTest {
             return coupon;
         });
 
-        AssociatePromotionResponse response = associatePromotionService.associate(request);
+        AssociatePromotionResponse response = associatePromotionService.associate(10, request);
 
         assertEquals(99, response.getCouponId());
         assertEquals(10, response.getUserId());
@@ -94,7 +94,7 @@ class AssociatePromotionServiceTest {
 
         ResourceNotFoundException ex = assertThrows(
                 ResourceNotFoundException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("User not found.", ex.getMessage());
         verify(couponRepository, never()).save(any());
@@ -107,7 +107,7 @@ class AssociatePromotionServiceTest {
 
         ResourceNotFoundException ex = assertThrows(
                 ResourceNotFoundException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("Promotion not found.", ex.getMessage());
         verify(couponRepository, never()).save(any());
@@ -121,7 +121,7 @@ class AssociatePromotionServiceTest {
 
         BusinessRuleException ex = assertThrows(
                 BusinessRuleException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is no longer available.", ex.getMessage());
         verify(couponRepository, never()).save(any());
@@ -135,7 +135,7 @@ class AssociatePromotionServiceTest {
 
         BusinessRuleException ex = assertThrows(
                 BusinessRuleException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion has expired.", ex.getMessage());
         verify(couponRepository, never()).save(any());
@@ -149,7 +149,7 @@ class AssociatePromotionServiceTest {
 
         BusinessRuleException ex = assertThrows(
                 BusinessRuleException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is not active yet.", ex.getMessage());
         verify(couponRepository, never()).save(any());
@@ -163,7 +163,7 @@ class AssociatePromotionServiceTest {
 
         BusinessRuleException ex = assertThrows(
                 BusinessRuleException.class,
-                () -> associatePromotionService.associate(request));
+                () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is already associated with the customer profile.", ex.getMessage());
         verify(couponRepository, never()).save(any());
