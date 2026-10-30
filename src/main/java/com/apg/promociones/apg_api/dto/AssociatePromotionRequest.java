@@ -12,9 +12,6 @@ import lombok.Setter;
 @AllArgsConstructor
 public class AssociatePromotionRequest {
 
-    @NotNull(message = "The userId field is required.")
-    private Integer userId;
-
     @NotNull(message = "The promotionId field is required.")
     private Integer promotionId;
 }

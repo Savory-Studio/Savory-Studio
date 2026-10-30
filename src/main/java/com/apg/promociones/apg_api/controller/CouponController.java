@@ -5,6 +5,7 @@ import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,14 +37,19 @@ public class CouponController {
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Promotion associated with the profile"),
-            @ApiResponse(responseCode = "400", description = "Missing or invalid userId or promotionId",
+            @ApiResponse(responseCode = "400", description = "Missing or invalid promotionId",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "User or promotion not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Promotion is not current or is already associated",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
-    public AssociatePromotionResponse associate(@Valid @RequestBody AssociatePromotionRequest request) {
-        return associatePromotionService.associate(request);
+    public AssociatePromotionResponse associate(
+            @Parameter(description = "Simulated client identifier for the request")
+            @RequestHeader(name = "X-User-Id") Integer userId,
+            @Valid @RequestBody AssociatePromotionRequest request) {
+        return associatePromotionService.associate(userId, request);
     }
 }

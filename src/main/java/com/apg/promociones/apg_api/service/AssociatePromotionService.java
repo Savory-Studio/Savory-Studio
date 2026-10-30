@@ -32,8 +32,8 @@ public class AssociatePromotionService {
      * No coupon is persisted if the promotion does not exist or is not currently valid.
      */
     @Transactional
-    public AssociatePromotionResponse associate(AssociatePromotionRequest request) {
-        User user = userRepository.findById(request.getUserId())
+    public AssociatePromotionResponse associate(Integer userId, AssociatePromotionRequest request) {
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
         Discount discount = discountRepository.findById(request.getPromotionId())
