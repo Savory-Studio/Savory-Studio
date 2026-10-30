@@ -78,7 +78,7 @@ class PromotionRepositoryTest {
         List<Discount> result = discountRepository.findActivePromotions();
 
         assertEquals(List.of(id), result.stream().map(Discount::getId).toList());
-        assertEquals(restaurantId, result.getFirst().getRestaurant().getId());
+        assertEquals(restaurantId, result.get(0).getRestaurant().getId());
     }
 
     @ParameterizedTest
