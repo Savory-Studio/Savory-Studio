@@ -8,12 +8,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface CouponRepository extends JpaRepository<Coupon, Integer> {
 
     Optional<Coupon> findByCouponHash(String couponHash);
+
+    List<Coupon> findByUser_Id(Integer userId);
 
     // RN-04: count how many times this user has redeemed coupons for this discount
     @Query(value = "SELECT COUNT(*) FROM coupon c WHERE c.user_id = :#{#user.id} " +
