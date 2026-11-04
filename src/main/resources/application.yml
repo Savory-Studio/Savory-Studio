@@ -22,3 +22,8 @@ spring:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+app:
+  simulated-auth:
+    enabled: true
+    token: ${TEST_AUTH_TOKEN:test-token}
