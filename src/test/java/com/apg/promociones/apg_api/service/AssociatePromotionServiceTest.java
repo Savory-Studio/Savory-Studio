@@ -79,7 +79,7 @@ class AssociatePromotionServiceTest {
         assertEquals(10, response.getUserId());
         assertEquals(20, response.getPromotionId());
         assertEquals("UNUSED", response.getStatus());
-        assertEquals("Promotion associated with the customer profile.", response.getMessage());
+        assertEquals("Promoción guardada en el perfil del cliente.", response.getMessage());
 
         ArgumentCaptor<Coupon> captor = ArgumentCaptor.forClass(Coupon.class);
         verify(couponRepository).save(captor.capture());
