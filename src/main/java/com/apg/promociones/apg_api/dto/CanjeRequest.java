@@ -1,6 +1,5 @@
 package com.apg.promociones.apg_api.dto;
 
-import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 @Getter
@@ -9,6 +8,7 @@ import lombok.*;
 @AllArgsConstructor
 public class CanjeRequest {
 
-    @NotNull(message = "El campo couponId es obligatorio.")
     private Integer couponId;
+
+    private String couponHash;
 }

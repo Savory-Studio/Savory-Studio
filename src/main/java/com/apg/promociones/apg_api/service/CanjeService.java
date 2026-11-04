@@ -2,6 +2,7 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.CanjeRequest;
 import com.apg.promociones.apg_api.dto.CanjeResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
 import com.apg.promociones.apg_api.model.Coupon;
@@ -29,9 +30,20 @@ public class CanjeService {
     @Transactional
     public CanjeResponse redeem(CanjeRequest request) {
 
-        // --- Fetch coupon or 404 ---
-        Coupon coupon = couponRepository.findById(request.getCouponId())
-                .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
+        // --- Validate that at least one identifier is present ---
+        if (request.getCouponHash() == null && request.getCouponId() == null) {
+            throw new BadRequestException("Debe proporcionar couponId o couponHash.");
+        }
+
+        // --- Fetch coupon by hash (priority) or by ID ---
+        Coupon coupon;
+        if (request.getCouponHash() != null) {
+            coupon = couponRepository.findByCouponHash(request.getCouponHash())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
+        } else {
+            coupon = couponRepository.findById(request.getCouponId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
+        }
 
         Discount discount = coupon.getDiscount();
 
@@ -79,6 +91,7 @@ public class CanjeService {
 
         return CanjeResponse.builder()
                 .couponId(coupon.getId())
+                .couponHash(coupon.getCouponHash())
                 .status("USED")
                 .redemptionTimestamp(now)
                 .message("Cupón canjeado exitosamente.")
