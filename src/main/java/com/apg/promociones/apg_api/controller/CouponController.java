@@ -3,9 +3,11 @@ package com.apg.promociones.apg_api.controller;
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
+import com.apg.promociones.apg_api.dto.UserCouponResponse;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -14,22 +16,46 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @RestController
-@RequestMapping("/api/coupons")
 @RequiredArgsConstructor
-@Tag(name = "Coupons", description = "Associate current promotions with the customer profile")
+@Tag(name = "Coupons", description = "Associate current promotions with the customer profile and list customer coupons")
 public class CouponController {
 
     private final AssociatePromotionService associatePromotionService;
 
-    @PostMapping
+    @GetMapping({"/api/cupones/usuario/{userId}", "/api/coupons/usuario/{userId}"})
+    @ResponseStatus(HttpStatus.OK)
+    @Operation(
+            summary = "Get coupons by user ID",
+            description = "Retrieves all coupons (UNUSED and USED) associated with the specified customer profile to support the 'My Coupons' screen."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Customer coupons retrieved successfully",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = UserCouponResponse.class)))),
+            @ApiResponse(responseCode = "400", description = "Invalid userId parameter",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "User not found",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public List<UserCouponResponse> getUserCoupons(
+            @Parameter(description = "Identifier of the customer whose coupons are requested")
+            @PathVariable("userId") Integer userId) {
+        return associatePromotionService.getUserCoupons(userId);
+    }
+
+    @PostMapping("/api/coupons")
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Associate a promotion with the customer profile",
