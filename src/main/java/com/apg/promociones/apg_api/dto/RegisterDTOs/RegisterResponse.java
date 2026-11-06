@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -12,10 +13,11 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RegisterResponse {
-    private Integer userId;
+    private Integer id;
     private String firstName;
+    private String secondName;
     private String lastName;
+    private LocalDate birthday;
     private String email;
-    private LocalDateTime createdAt;
-    private String message;
+    private LocalDateTime joinDate;
 }
