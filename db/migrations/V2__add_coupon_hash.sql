@@ -1,25 +1,22 @@
--- =============================================================
--- V2: Add coupon_hash column for QR-based redemption
--- Covers: APG-35
--- Idempotent: safe to run on databases with or without the column
--- =============================================================
+-- Add QR identifiers for existing coupons without replacing issued identifiers.
+DO $$
+BEGIN
+    ALTER TABLE coupon ADD COLUMN IF NOT EXISTS coupon_hash VARCHAR(36);
 
--- Add column if it does not exist
-DO $$ BEGIN
-    ALTER TABLE coupon ADD COLUMN coupon_hash VARCHAR(36);
-EXCEPTION WHEN duplicate_column THEN NULL;
-END $$;
+    UPDATE coupon
+    SET coupon_hash = gen_random_uuid()::text
+    WHERE coupon_hash IS NULL;
 
--- Backfill existing rows that have no hash
-UPDATE coupon
-SET    coupon_hash = gen_random_uuid()::text
-WHERE  coupon_hash IS NULL;
+    ALTER TABLE coupon ALTER COLUMN coupon_hash SET NOT NULL;
 
--- Set NOT NULL after backfill
-ALTER TABLE coupon ALTER COLUMN coupon_hash SET NOT NULL;
-
--- Add unique constraint if it does not exist
-DO $$ BEGIN
-    ALTER TABLE coupon ADD CONSTRAINT uq_coupon_hash UNIQUE (coupon_hash);
-EXCEPTION WHEN duplicate_object THEN NULL;
+    -- The deployed database or snapshot can already enforce this under another name.
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_index AS idx
+        JOIN pg_attribute AS col ON col.attrelid = idx.indrelid AND col.attnum = idx.indkey[0]
+        WHERE idx.indrelid = 'coupon'::regclass AND col.attname = 'coupon_hash'
+          AND idx.indisunique AND idx.indisvalid AND idx.indnkeyatts = 1 AND idx.indpred IS NULL
+    ) THEN
+        ALTER TABLE coupon ADD CONSTRAINT uq_coupon_hash UNIQUE (coupon_hash);
+    END IF;
 END $$;

@@ -4,6 +4,8 @@
 -- For existing databases, run the migrations in db/migrations/
 -- =============================================================
 
+BEGIN;
+
 -- Enums
 CREATE TYPE discount_status_enum AS ENUM ('Active', 'Suspended', 'Finished');
 CREATE TYPE discount_type_enum AS ENUM ('PERCENTAGE', 'FIXED_VALUE', 'IXJ');
@@ -73,9 +75,9 @@ CREATE TABLE coupon (
     user_id                      INT NOT NULL REFERENCES users(user_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     discount_id                  INT NOT NULL REFERENCES discounts(discount_id) ON UPDATE CASCADE ON DELETE RESTRICT,
     coupon_status                coupon_status_enum NOT NULL DEFAULT 'UNUSED',
-    coupon_hash                  VARCHAR(36) NOT NULL UNIQUE,
     coupon_claim_timestamp       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     coupon_redemption_timestamp  TIMESTAMPTZ,
+    coupon_hash                  VARCHAR(36) NOT NULL CONSTRAINT uq_coupon_hash UNIQUE,
 
     CHECK (
         (coupon_status = 'UNUSED' AND coupon_redemption_timestamp IS NULL)
@@ -83,3 +85,10 @@ CREATE TABLE coupon (
             AND coupon_redemption_timestamp >= coupon_claim_timestamp)
     )
 );
+
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE restaurants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE discounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon ENABLE ROW LEVEL SECURITY;
+
+COMMIT;

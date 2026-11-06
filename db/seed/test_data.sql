@@ -3,15 +3,19 @@
 -- Idempotent: uses ON CONFLICT DO NOTHING
 -- =============================================================
 
+-- Only seed isolated test databases. Keep the fixed IDs and their sequences in sync.
+BEGIN;
+LOCK TABLE users, restaurants, discounts, coupon IN SHARE ROW EXCLUSIVE MODE;
+
 -- Users (passwords are BCrypt hashes of 'password123')
 INSERT INTO users (user_id, user_first_name, user_second_name, user_last_name, user_birthday, user_email, user_password_hash)
 VALUES
     (1, 'Carlos', 'Andrés', 'Martínez', '1990-03-15', 'carlos@example.com',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+     '$2a$10$oGoA4Q3jq9MBf.25NR5oMO5lF4t9h69UbdMVNLUnCaH5FIou3uGt2'),
     (2, 'María', NULL, 'López', '1995-07-22', 'maria@example.com',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'),
+     '$2a$10$oGoA4Q3jq9MBf.25NR5oMO5lF4t9h69UbdMVNLUnCaH5FIou3uGt2'),
     (3, 'Emmanuel', 'Alejandro', 'Peñuela', '2000-05-15', 'emmanuel@example.com',
-     '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')
+     '$2a$10$oGoA4Q3jq9MBf.25NR5oMO5lF4t9h69UbdMVNLUnCaH5FIou3uGt2')
 ON CONFLICT (user_id) DO NOTHING;
 
 -- Restaurants
@@ -57,3 +61,15 @@ VALUES
     (3, 1, 3, 'UNUSED', '2026-10-29 09:00:00', NULL,
      'a1b2c3d4-e5f6-7890-abcd-000000000003')
 ON CONFLICT (coupon_id) DO NOTHING;
+
+-- Explicit identity values do not advance the sequence. Never rewind a sequence on retry.
+SELECT setval(sequence_name, highest_id)
+FROM (VALUES
+    (pg_get_serial_sequence('users', 'user_id')::regclass, (SELECT max(user_id) FROM users)),
+    (pg_get_serial_sequence('restaurants', 'restaurant_id')::regclass, (SELECT max(restaurant_id) FROM restaurants)),
+    (pg_get_serial_sequence('discounts', 'discount_id')::regclass, (SELECT max(discount_id) FROM discounts)),
+    (pg_get_serial_sequence('coupon', 'coupon_id')::regclass, (SELECT max(coupon_id) FROM coupon))
+) AS seeded_sequences(sequence_name, highest_id)
+WHERE COALESCE(pg_sequence_last_value(sequence_name), 0) < highest_id;
+
+COMMIT;
