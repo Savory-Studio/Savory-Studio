@@ -12,6 +12,7 @@ import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.UserRepository;
+import com.apg.promociones.apg_api.util.CouponHashGenerator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +50,7 @@ public class AssociatePromotionService {
                 .user(user)
                 .discount(discount)
                 .status(CouponStatus.UNUSED)
+                .couponHash(CouponHashGenerator.generate())
                 .claimTimestamp(now)
                 .build();
         coupon = couponRepository.save(coupon);
@@ -57,9 +59,10 @@ public class AssociatePromotionService {
                 .couponId(coupon.getId())
                 .userId(user.getId())
                 .promotionId(discount.getId())
+                .couponHash(coupon.getCouponHash())
                 .status(CouponStatus.UNUSED.name())
                 .claimTimestamp(now)
-                .message("Promotion associated with the customer profile.")
+                .message("Promoción guardada en el perfil del cliente.")
                 .build();
     }
 

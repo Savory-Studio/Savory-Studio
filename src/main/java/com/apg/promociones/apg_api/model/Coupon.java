@@ -33,6 +33,9 @@ public class Coupon {
     @Column(name = "coupon_status", nullable = false)
     private CouponStatus status;
 
+    @Column(name = "coupon_hash", nullable = false, unique = true, length = 36)
+    private String couponHash;
+
     @Column(name = "coupon_claim_timestamp", updatable = false)
     private LocalDateTime claimTimestamp;
 

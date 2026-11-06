@@ -18,6 +18,7 @@ public class AssociatePromotionResponse {
     private Integer couponId;
     private Integer userId;
     private Integer promotionId;
+    private String couponHash;
     private String status;
     private LocalDateTime claimTimestamp;
     private String message;
