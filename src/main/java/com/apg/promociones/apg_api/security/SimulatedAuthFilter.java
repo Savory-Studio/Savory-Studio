@@ -35,8 +35,9 @@ public class SimulatedAuthFilter extends OncePerRequestFilter {
         if (!properties.isEnabled()) {
             return true;
         }
-        String path = request.getRequestURI();
-        return path == null || !path.startsWith("/api/");
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        return !path.startsWith("/api/")
+                || ("POST".equals(request.getMethod()) && "/api/auth/register".equals(path));
     }
 
     @Override
