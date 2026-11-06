@@ -15,7 +15,7 @@ import lombok.Setter;
 @Builder
 public class AssociatePromotionRequest {
 
-    @Schema(description = "Identifier of the customer claiming the promotion (optional if X-User-Id header is sent)", example = "1")
+    @Schema(description = "Optional customer ID. Must match the caller while simulated authentication is enabled.", example = "1")
     private Integer userId;
 
     @NotNull(message = "The promotionId field is required.")

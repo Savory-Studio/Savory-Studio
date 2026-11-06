@@ -1,5 +1,6 @@
 package com.apg.promociones.apg_api.controller;
 
+import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
 import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.GlobalExceptionHandler;
@@ -19,7 +20,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -27,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -52,6 +56,47 @@ class PromocionControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(promocionController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void returns200WithActivePromotionsList() throws Exception {
+        ActivePromotionResponse promo = ActivePromotionResponse.builder()
+                .discountId(5)
+                .restaurantId(1)
+                .restaurantName("Savory Grill")
+                .name("Lunch 20% off")
+                .applicableProducts("Executive menu")
+                .type("PERCENTAGE")
+                .amount(new BigDecimal("20.00"))
+                .status("Active")
+                .maxUses(100)
+                .build();
+
+        when(promocionService.getActivePromotions()).thenReturn(List.of(promo));
+
+        mockMvc.perform(get("/api/promociones/activas")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].discountId").value(5))
+                .andExpect(jsonPath("$[0].restaurantId").value(1))
+                .andExpect(jsonPath("$[0].restaurantName").value("Savory Grill"))
+                .andExpect(jsonPath("$[0].name").value("Lunch 20% off"))
+                .andExpect(jsonPath("$[0].type").value("PERCENTAGE"))
+                .andExpect(jsonPath("$[0].status").value("Active"));
+
+        verify(promocionService).getActivePromotions();
+    }
+
+    @Test
+    void returns200WithEmptyListWhenNoActivePromotionsExist() throws Exception {
+        when(promocionService.getActivePromotions()).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/promociones/activas")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+        verify(promocionService).getActivePromotions();
     }
 
     @ParameterizedTest

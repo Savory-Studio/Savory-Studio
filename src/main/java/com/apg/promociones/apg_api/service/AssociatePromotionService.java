@@ -2,10 +2,13 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
+import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
+import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
@@ -18,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +30,23 @@ public class AssociatePromotionService {
     private final UserRepository userRepository;
     private final DiscountRepository discountRepository;
     private final CouponRepository couponRepository;
+
+    /**
+     * Retrieves all coupons claimed by the specified customer (both UNUSED and USED).
+     */
+    @Transactional(readOnly = true)
+    public List<UserCouponResponse> getUserCoupons(Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BadRequestException("The userId must be a positive integer.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found."));
+
+        return couponRepository.findByUser_Id(user.getId()).stream()
+                .map(this::toUserCouponResponse)
+                .toList();
+    }
 
     /**
      * Associates an active promotion with the customer profile by creating an UNUSED coupon.
@@ -80,5 +101,28 @@ public class AssociatePromotionService {
         if (discount.getEndTimestamp() != null && discount.getEndTimestamp().isBefore(now)) {
             throw new BusinessRuleException("This promotion has expired.");
         }
+    }
+
+    private UserCouponResponse toUserCouponResponse(Coupon coupon) {
+        Discount discount = coupon.getDiscount();
+        Restaurant restaurant = discount != null ? discount.getRestaurant() : null;
+        return UserCouponResponse.builder()
+                .couponId(coupon.getId())
+                .userId(coupon.getUser() != null ? coupon.getUser().getId() : null)
+                .promotionId(discount != null ? discount.getId() : null)
+                .promotionName(discount != null ? discount.getName() : null)
+                .restaurantId(restaurant != null ? restaurant.getId() : null)
+                .restaurantName(restaurant != null ? restaurant.getName() : null)
+                .type(discount != null && discount.getType() != null ? discount.getType().name() : null)
+                .amount(discount != null ? discount.getAmount() : null)
+                .customerTakesAmount(discount != null ? discount.getCustomerTakesAmount() : null)
+                .customerPaysAmount(discount != null ? discount.getCustomerPaysAmount() : null)
+                .couponHash(coupon.getCouponHash())
+                .status(coupon.getStatus() != null ? coupon.getStatus().name() : null)
+                .claimTimestamp(coupon.getClaimTimestamp())
+                .redemptionTimestamp(coupon.getRedemptionTimestamp())
+                .endTimestamp(discount != null ? discount.getEndTimestamp() : null)
+                .imageUrl(discount != null ? discount.getImageUrl() : null)
+                .build();
     }
 }
