@@ -2,13 +2,17 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
+import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
+import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
+import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.UserRepository;
@@ -21,10 +25,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -46,20 +52,83 @@ class AssociatePromotionServiceTest {
     private AssociatePromotionService associatePromotionService;
 
     private User user;
+    private Restaurant restaurant;
     private Discount discount;
     private AssociatePromotionRequest request;
 
     @BeforeEach
     void setUp() {
         user = User.builder().id(10).firstName("Ana").lastName("Perez").build();
+        restaurant = Restaurant.builder().id(1).name("Savory Grill").owner(user).build();
         discount = Discount.builder()
                 .id(20)
+                .restaurant(restaurant)
                 .name("2x1 lunch")
+                .type(DiscountType.IXJ)
                 .status(DiscountStatus.Active)
                 .startTimestamp(LocalDateTime.now().minusDays(1))
                 .endTimestamp(LocalDateTime.now().plusDays(7))
                 .build();
         request = new AssociatePromotionRequest(20);
+    }
+
+    @Test
+    void getUserCouponsReturnsMappedCouponsForExistingUser() {
+        Coupon coupon = Coupon.builder()
+                .id(15)
+                .user(user)
+                .discount(discount)
+                .status(CouponStatus.UNUSED)
+                .couponHash("hash-123")
+                .claimTimestamp(LocalDateTime.of(2026, 10, 30, 14, 0))
+                .build();
+
+        when(userRepository.findById(10)).thenReturn(Optional.of(user));
+        when(couponRepository.findByUser_Id(10)).thenReturn(List.of(coupon));
+
+        List<UserCouponResponse> result = associatePromotionService.getUserCoupons(10);
+
+        assertEquals(1, result.size());
+        assertEquals(15, result.get(0).getCouponId());
+        assertEquals(10, result.get(0).getUserId());
+        assertEquals(20, result.get(0).getPromotionId());
+        assertEquals("2x1 lunch", result.get(0).getPromotionName());
+        assertEquals(1, result.get(0).getRestaurantId());
+        assertEquals("Savory Grill", result.get(0).getRestaurantName());
+        assertEquals("hash-123", result.get(0).getCouponHash());
+        assertEquals("UNUSED", result.get(0).getStatus());
+    }
+
+    @Test
+    void getUserCouponsReturnsEmptyListWhenUserHasNoCoupons() {
+        when(userRepository.findById(10)).thenReturn(Optional.of(user));
+        when(couponRepository.findByUser_Id(10)).thenReturn(List.of());
+
+        List<UserCouponResponse> result = associatePromotionService.getUserCoupons(10);
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void getUserCouponsThrows400WhenUserIdIsNonPositive() {
+        BadRequestException ex = assertThrows(
+                BadRequestException.class,
+                () -> associatePromotionService.getUserCoupons(0));
+
+        assertEquals("The userId must be a positive integer.", ex.getMessage());
+        verify(couponRepository, never()).findByUser_Id(any());
+    }
+
+    @Test
+    void getUserCouponsThrows404WhenUserDoesNotExist() {
+        when(userRepository.findById(999)).thenReturn(Optional.empty());
+
+        ResourceNotFoundException ex = assertThrows(
+                ResourceNotFoundException.class,
+                () -> associatePromotionService.getUserCoupons(999));
+
+        assertEquals("User not found.", ex.getMessage());
+        verify(couponRepository, never()).findByUser_Id(any());
     }
 
     @Test

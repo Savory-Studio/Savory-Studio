@@ -2,6 +2,8 @@ package com.apg.promociones.apg_api.controller;
 
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
+import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.GlobalExceptionHandler;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
@@ -17,9 +19,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,6 +44,57 @@ class CouponControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(couponController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void returns200WithUserCouponsList() throws Exception {
+        UserCouponResponse coupon = UserCouponResponse.builder()
+                .couponId(15)
+                .userId(10)
+                .promotionId(20)
+                .promotionName("2x1 Lunch")
+                .restaurantId(1)
+                .restaurantName("Savory Grill")
+                .couponHash("a3f1b2c4-d5e6-7890-abcd-ef1234567890")
+                .status("UNUSED")
+                .claimTimestamp(LocalDateTime.of(2026, 10, 30, 14, 35))
+                .build();
+
+        when(associatePromotionService.getUserCoupons(10)).thenReturn(List.of(coupon));
+
+        mockMvc.perform(get("/api/cupones/usuario/10")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].couponId").value(15))
+                .andExpect(jsonPath("$[0].userId").value(10))
+                .andExpect(jsonPath("$[0].promotionId").value(20))
+                .andExpect(jsonPath("$[0].promotionName").value("2x1 Lunch"))
+                .andExpect(jsonPath("$[0].couponHash").value("a3f1b2c4-d5e6-7890-abcd-ef1234567890"))
+                .andExpect(jsonPath("$[0].status").value("UNUSED"));
+    }
+
+    @Test
+    void returns404WhenUserDoesNotExistOnGetCoupons() throws Exception {
+        when(associatePromotionService.getUserCoupons(999))
+                .thenThrow(new ResourceNotFoundException("User not found."));
+
+        mockMvc.perform(get("/api/cupones/usuario/999")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.message").value("User not found."));
+    }
+
+    @Test
+    void returns400WhenUserIdIsInvalidOnGetCoupons() throws Exception {
+        when(associatePromotionService.getUserCoupons(0))
+                .thenThrow(new BadRequestException("The userId must be a positive integer."));
+
+        mockMvc.perform(get("/api/cupones/usuario/0")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("The userId must be a positive integer."));
     }
 
     @Test
