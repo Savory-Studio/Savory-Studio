@@ -9,7 +9,7 @@ This document establishes the guidelines, branching strategy, and commit convent
 
 ## 1. Branching Strategy
 
-The main branch **`main`** is protected (direct pushes and unreviewed merges are strictly prohibited). All development must take place within three secondary branch types:
+The main branch **`main, develop`** is protected (direct pushes and unreviewed merges are strictly prohibited). All development must take place within three secondary branch types:
 
 * **`feature/`**: Used for developing new features, modules, or core functionality.
 * **`testing/`**: Used for test cases, QA automation, test scripts, or seed data generation.

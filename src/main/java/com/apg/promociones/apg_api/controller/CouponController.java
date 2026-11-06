@@ -3,6 +3,7 @@ package com.apg.promociones.apg_api.controller;
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -27,29 +28,30 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "Coupons", description = "Associate current promotions with the customer profile")
 public class CouponController {
 
-    private final AssociatePromotionService associatePromotionService;
+        private final AssociatePromotionService associatePromotionService;
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(
-            summary = "Associate a promotion with the customer profile",
-            description = "Validates that the promotion exists and is currently valid, then creates an UNUSED coupon on the user profile."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Promotion associated with the profile"),
-            @ApiResponse(responseCode = "400", description = "Missing or invalid promotionId",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "User or promotion not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Promotion is not current or is already associated",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public AssociatePromotionResponse associate(
-            @Parameter(description = "Simulated client identifier for the request")
-            @RequestHeader(name = "X-User-Id") Integer userId,
-            @Valid @RequestBody AssociatePromotionRequest request) {
-        return associatePromotionService.associate(userId, request);
-    }
+        @PostMapping
+        @ResponseStatus(HttpStatus.CREATED)
+        @Operation(summary = "Associate a promotion with the customer profile", description = "Validates that the promotion exists and is currently valid, then creates an UNUSED coupon on the user profile.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "201", description = "Promotion associated with the profile"),
+                        @ApiResponse(responseCode = "400", description = "Missing or invalid promotionId", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "User or promotion not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "409", description = "Promotion is not current or is already associated", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+        })
+        public AssociatePromotionResponse associate(
+                        @Parameter(description = "Simulated client identifier for the request (optional if userId is sent in request body)") @RequestHeader(name = "X-User-Id", required = false) Integer headerUserId,
+
+                        @Valid @RequestBody AssociatePromotionRequest request) {
+                Integer effectiveUserId = request.getUserId() != null
+                                ? request.getUserId()
+                                : headerUserId;
+
+                if (effectiveUserId == null) {
+                        throw new UnauthorizedException("The X-User-Id header is missing.");
+                }
+
+                return associatePromotionService.associate(effectiveUserId, request);
+        }
 }

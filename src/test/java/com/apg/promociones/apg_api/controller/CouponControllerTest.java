@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.time.LocalDateTime;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -107,5 +108,54 @@ class CouponControllerTest {
                         .content("{\"promotionId\":20}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("This promotion has expired."));
+    }
+
+    @Test
+    void returns404WhenUserFromHeaderDoesNotExist() throws Exception {
+        when(associatePromotionService.associate(eq(999), any(AssociatePromotionRequest.class)))
+                .thenThrow(new ResourceNotFoundException("User not found."));
+
+        mockMvc.perform(post("/api/coupons")
+                        .header("X-User-Id", "999")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"promotionId\":20}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found."));
+    }
+
+    @Test
+    void returns404WhenUserFromBodyDoesNotExist() throws Exception {
+        when(associatePromotionService.associate(eq(999), any(AssociatePromotionRequest.class)))
+                .thenThrow(new ResourceNotFoundException("User not found."));
+
+        mockMvc.perform(post("/api/coupons")
+                        .header("X-User-Id", "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":999,\"promotionId\":20}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found."));
+    }
+
+    @Test
+    void returns201WhenUserProvidedInBodyTakesPrecedence() throws Exception {
+        when(associatePromotionService.associate(eq(15), any(AssociatePromotionRequest.class)))
+                .thenReturn(AssociatePromotionResponse.builder()
+                        .couponId(99)
+                        .userId(15)
+                        .promotionId(20)
+                        .status("UNUSED")
+                        .claimTimestamp(LocalDateTime.of(2026, 10, 26, 16, 0))
+                        .message("Promotion associated with the customer profile.")
+                        .build());
+
+        mockMvc.perform(post("/api/coupons")
+                        .header("X-User-Id", "10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":15,\"promotionId\":20}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.couponId").value(99))
+                .andExpect(jsonPath("$.userId").value(15))
+                .andExpect(jsonPath("$.promotionId").value(20))
+                .andExpect(jsonPath("$.status").value("UNUSED"));
     }
 }
