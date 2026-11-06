@@ -110,9 +110,6 @@ public class PromocionService {
                 .status(DiscountStatus.Active)
                 .applicableProducts(request.getApplicableProducts())
                 .type(type)
-                .amount(request.getAmount())
-                .customerTakesAmount(request.getCustomerTakesAmount())
-                .customerPaysAmount(request.getCustomerPaysAmount())
                 .startTimestamp(request.getStartTimestamp())
                 .endTimestamp(request.getEndTimestamp())
                 .maxUses(request.getMaxUses())
@@ -121,6 +118,12 @@ public class PromocionService {
                 .additionalUseConditions(request.getAdditionalUseConditions())
                 .build();
 
+        if (type == DiscountType.IXJ) {
+            discount.setCustomerTakesAmount(request.getCustomerTakesAmount());
+            discount.setCustomerPaysAmount(request.getCustomerPaysAmount());
+        } else {
+            discount.setAmount(request.getAmount());
+        }
         discountRepository.save(discount);
 
         return PromocionResponse.builder()
