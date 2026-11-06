@@ -1,5 +1,6 @@
 package com.apg.promociones.apg_api.service;
 
+import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
 import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +24,13 @@ public class PromocionService {
 
     private final DiscountRepository discountRepository;
     private final RestaurantRepository restaurantRepository;
+
+    @Transactional(readOnly = true)
+    public List<ActivePromotionResponse> getActivePromotions() {
+        return discountRepository.findActivePromotions().stream()
+                .map(this::toActivePromotionResponse)
+                .toList();
+    }
 
     @Transactional
     public PromocionResponse create(PromocionRequest request) {
@@ -125,6 +134,28 @@ public class PromocionService {
                 .endTimestamp(discount.getEndTimestamp())
                 .maxUses(discount.getMaxUses())
                 .message("Promoción creada exitosamente.")
+                .build();
+    }
+
+    private ActivePromotionResponse toActivePromotionResponse(Discount discount) {
+        Restaurant restaurant = discount.getRestaurant();
+        return ActivePromotionResponse.builder()
+                .discountId(discount.getId())
+                .restaurantId(restaurant != null ? restaurant.getId() : null)
+                .restaurantName(restaurant != null ? restaurant.getName() : null)
+                .name(discount.getName())
+                .applicableProducts(discount.getApplicableProducts())
+                .type(discount.getType() != null ? discount.getType().name() : null)
+                .amount(discount.getAmount())
+                .customerTakesAmount(discount.getCustomerTakesAmount())
+                .customerPaysAmount(discount.getCustomerPaysAmount())
+                .status(discount.getStatus() != null ? discount.getStatus().name() : null)
+                .startTimestamp(discount.getStartTimestamp())
+                .endTimestamp(discount.getEndTimestamp())
+                .maxUses(discount.getMaxUses())
+                .maxUseAmountPerUser(discount.getMaxUseAmountPerUser())
+                .imageUrl(discount.getImageUrl())
+                .additionalUseConditions(discount.getAdditionalUseConditions())
                 .build();
     }
 }
