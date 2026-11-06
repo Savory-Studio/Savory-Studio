@@ -32,6 +32,20 @@ class SimulatedAuthFilterTest {
         chain = mock(FilterChain.class);
     }
 
+    @Test
+    void rejectsRequestsWhenNoTestTokenIsConfigured() throws Exception {
+        SimulatedAuthFilter unconfigured = new SimulatedAuthFilter(new SimulatedAuthProperties());
+        MockHttpServletRequest request = apiRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test-token");
+        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "10");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        unconfigured.doFilter(request, response, chain);
+
+        assertEquals(401, response.getStatus());
+        verify(chain, never()).doFilter(request, response);
+    }
+
     @AfterEach
     void tearDown() {
         SimulatedRequestContext.clear();

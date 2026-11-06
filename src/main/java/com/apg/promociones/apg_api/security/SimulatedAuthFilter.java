@@ -50,7 +50,7 @@ public class SimulatedAuthFilter extends OncePerRequestFilter {
                 writeUnauthorized(response, "The test token is missing. Please send Authorization: Bearer or Basic.");
                 return;
             }
-            if (!properties.getToken().equals(token)) {
+            if (!token.equals(properties.getToken())) {
                 writeUnauthorized(response, "The test token is invalid.");
                 return;
             }

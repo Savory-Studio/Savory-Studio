@@ -4,6 +4,10 @@ import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
+import com.apg.promociones.apg_api.security.SimulatedAuthProperties;
+import com.apg.promociones.apg_api.security.SimulatedRequestContext;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -16,6 +20,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +37,7 @@ import java.util.List;
 public class CouponController {
 
     private final AssociatePromotionService associatePromotionService;
+    private final SimulatedAuthProperties authProperties;
 
     @GetMapping({"/api/cupones/usuario/{userId}", "/api/coupons/usuario/{userId}"})
     @ResponseStatus(HttpStatus.OK)
@@ -46,13 +52,15 @@ public class CouponController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "The requested user differs from the simulated caller",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "User not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public List<UserCouponResponse> getUserCoupons(
             @Parameter(description = "Identifier of the customer whose coupons are requested")
             @PathVariable("userId") Integer userId) {
-        return associatePromotionService.getUserCoupons(userId);
+        return associatePromotionService.getUserCoupons(resolveCustomer(userId, null));
     }
 
     @PostMapping("/api/coupons")
@@ -67,6 +75,8 @@ public class CouponController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "The requested user differs from the simulated caller",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "User or promotion not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409", description = "Promotion is not current or is already associated",
@@ -74,8 +84,26 @@ public class CouponController {
     })
     public AssociatePromotionResponse associate(
             @Parameter(description = "Simulated client identifier for the request")
-            @RequestHeader(name = "X-User-Id") Integer userId,
+            @RequestHeader(name = "X-User-Id", required = false) Integer headerUserId,
             @Valid @RequestBody AssociatePromotionRequest request) {
-        return associatePromotionService.associate(userId, request);
+        return associatePromotionService.associate(resolveCustomer(request.getUserId(), headerUserId), request);
+    }
+
+    private Integer resolveCustomer(Integer requestedId, Integer headerId) {
+        if (requestedId != null && requestedId <= 0) {
+            throw new BadRequestException("The userId must be a positive integer.");
+        }
+        if (authProperties.isEnabled()) {
+            Integer callerId = SimulatedRequestContext.requireUserId();
+            if (requestedId != null && !callerId.equals(requestedId)) {
+                throw new AccessDeniedException("The requested user differs from the authenticated customer.");
+            }
+            return callerId;
+        }
+        Integer customerId = requestedId != null ? requestedId : headerId;
+        if (customerId == null) {
+            throw new UnauthorizedException("The X-User-Id header is missing.");
+        }
+        return customerId;
     }
 }
