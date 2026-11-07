@@ -36,7 +36,7 @@ public class PromocionController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Active promotions retrieved successfully",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = ActivePromotionResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "Missing simulated identity headers or test token",
+            @ApiResponse(responseCode = "401", description = "Missing or invalid Bearer token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public List<ActivePromotionResponse> getActivePromotions() {
