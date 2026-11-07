@@ -1,5 +1,7 @@
 package com.apg.promociones.apg_api.controller;
 
+import com.apg.promociones.apg_api.dto.LoginDTOs.LoginRequest;
+import com.apg.promociones.apg_api.dto.LoginDTOs.LoginResponse;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterRequest;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterResponse;
 import com.apg.promociones.apg_api.service.AuthService;
@@ -33,5 +35,29 @@ public class AuthController {
     public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
         RegisterResponse response = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/login")
+    @Operation(
+            summary = "User login",
+            description = "Authenticates user credentials and returns a signed JWT token."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Authentication successful"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Invalid request body or missing fields"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Invalid credentials (email not found or wrong password)"
+            )
+    })
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+        LoginResponse response = authService.login(request);
+        return ResponseEntity.ok(response);
     }
 }

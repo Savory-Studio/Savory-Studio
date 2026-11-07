@@ -27,3 +27,7 @@ app:
   simulated-auth:
     enabled: true
     token: ${TEST_AUTH_TOKEN:test-token}
+
+jwt:
+  secret: ${JWT_SECRET:MiClaveSuperSecretaYLoSuficientementeLargaParaHS25612345}
+  expiration: ${JWT_EXPIRATION:86400000}
