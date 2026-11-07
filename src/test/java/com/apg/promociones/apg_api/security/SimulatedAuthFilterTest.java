@@ -1,7 +1,6 @@
 package com.apg.promociones.apg_api.security;
 
 import jakarta.servlet.FilterChain;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -12,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -27,17 +25,16 @@ class SimulatedAuthFilterTest {
     void setUp() {
         SimulatedAuthProperties properties = new SimulatedAuthProperties();
         properties.setEnabled(true);
-        properties.setToken("test-token");
+        properties.setToken("test_token_123");
         filter = new SimulatedAuthFilter(properties);
         chain = mock(FilterChain.class);
     }
 
     @Test
-    void rejectsRequestsWhenNoTestTokenIsConfigured() throws Exception {
+    void rejectsRequestsWhenNoTokenIsConfigured() throws Exception {
         SimulatedAuthFilter unconfigured = new SimulatedAuthFilter(new SimulatedAuthProperties());
         MockHttpServletRequest request = apiRequest();
-        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test-token");
-        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "10");
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test_token_123");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         unconfigured.doFilter(request, response, chain);
@@ -46,58 +43,48 @@ class SimulatedAuthFilterTest {
         verify(chain, never()).doFilter(request, response);
     }
 
-    @AfterEach
-    void tearDown() {
-        SimulatedRequestContext.clear();
-    }
-
     @Test
-    void acceptsBearerTokenAndUserId() throws Exception {
+    void acceptsValidBearerTokenWithoutExtraHeaders() throws Exception {
         MockHttpServletRequest request = apiRequest();
-        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test-token");
-        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "10");
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test_token_123");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, chain);
 
         verify(chain).doFilter(request, response);
         assertEquals(200, response.getStatus());
-        assertNull(SimulatedRequestContext.get());
     }
 
     @Test
-    void acceptsBasicPasswordAsTestToken() throws Exception {
+    void rejectsBasicAuthenticationHeader() throws Exception {
         MockHttpServletRequest request = apiRequest();
-        String basic = Base64.getEncoder().encodeToString("cliente:test-token".getBytes(StandardCharsets.UTF_8));
+        String basic = Base64.getEncoder().encodeToString("cliente:test_token_123".getBytes(StandardCharsets.UTF_8));
         request.addHeader(HttpHeaders.AUTHORIZATION, "Basic " + basic);
-        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "7");
-        request.addHeader(SimulatedAuthFilter.RESTAURANT_ID_HEADER, "3");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-
-        filter.doFilter(request, response, chain);
-
-        verify(chain).doFilter(request, response);
-        assertEquals(200, response.getStatus());
-    }
-
-    @Test
-    void rejectsMissingToken() throws Exception {
-        MockHttpServletRequest request = apiRequest();
-        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "10");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, chain);
 
         verify(chain, never()).doFilter(request, response);
         assertEquals(401, response.getStatus());
-        assertTrue(response.getContentAsString().contains("The test token is missing"));
+        assertTrue(response.getContentAsString().contains("The Bearer token is missing"));
     }
 
     @Test
-    void rejectsInvalidToken() throws Exception {
+    void rejectsMissingBearerToken() throws Exception {
         MockHttpServletRequest request = apiRequest();
-        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer other-token");
-        request.addHeader(SimulatedAuthFilter.USER_ID_HEADER, "10");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(request, response);
+        assertEquals(401, response.getStatus());
+        assertTrue(response.getContentAsString().contains("The Bearer token is missing"));
+    }
+
+    @Test
+    void rejectsInvalidBearerToken() throws Exception {
+        MockHttpServletRequest request = apiRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer invalid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, chain);
@@ -108,16 +95,16 @@ class SimulatedAuthFilterTest {
     }
 
     @Test
-    void rejectsMissingUserId() throws Exception {
-        MockHttpServletRequest request = apiRequest();
-        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test-token");
+    void allowsPublicRegisterEndpointWithoutToken() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setRequestURI("/api/auth/register");
+        request.setMethod("POST");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, chain);
 
-        verify(chain, never()).doFilter(request, response);
-        assertEquals(401, response.getStatus());
-        assertTrue(response.getContentAsString().contains("X-User-Id"));
+        verify(chain).doFilter(request, response);
+        assertEquals(200, response.getStatus());
     }
 
     private static MockHttpServletRequest apiRequest() {

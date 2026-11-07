@@ -11,38 +11,23 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class OpenApiConfig {
 
+    public static final String BEARER_AUTH_SCHEME = "bearerAuth";
+
     @Bean
-    public OpenAPI apiInfo() {
-        SecurityScheme testBearer = new SecurityScheme()
-                .type(SecurityScheme.Type.HTTP)
-                .scheme("bearer")
-                .bearerFormat("TestToken")
-                .description("Test token (default: test-token). Replaced by JWT in the login sprint.");
-
-        SecurityScheme userIdHeader = new SecurityScheme()
-                .type(SecurityScheme.Type.APIKEY)
-                .in(SecurityScheme.In.HEADER)
-                .name("X-User-Id")
-                .description("Simulated client identifier for the request.");
-
-        SecurityScheme restaurantIdHeader = new SecurityScheme()
-                .type(SecurityScheme.Type.APIKEY)
-                .in(SecurityScheme.In.HEADER)
-                .name("X-Restaurant-Id")
-                .description("Optional restaurant identifier (for staff operations).");
-
+    public OpenAPI savoryOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("APG Promociones API")
-                        .version("1.0.0")
-                        .description("REST API for gastronomy promotion and coupon redemption management. "
-                                + "Sprint 1 identity: Authorization Bearer/Basic + X-User-Id."))
-                .components(new Components()
-                        .addSecuritySchemes("testBearer", testBearer)
-                        .addSecuritySchemes("userIdHeader", userIdHeader)
-                        .addSecuritySchemes("restaurantIdHeader", restaurantIdHeader))
+                        .title("Savory Studio — Promotions & Coupons API")
+                        .version("v1")
+                        .description("Protected endpoints require a Bearer token in the Authorization header "
+                                + "(configured via TEST_AUTH_TOKEN in .env until the login endpoint issues JWT tokens)."))
                 .addSecurityItem(new SecurityRequirement()
-                        .addList("testBearer")
-                        .addList("userIdHeader"));
+                        .addList(BEARER_AUTH_SCHEME))
+                .components(new Components()
+                        .addSecuritySchemes(BEARER_AUTH_SCHEME, new SecurityScheme()
+                                .type(SecurityScheme.Type.HTTP)
+                                .scheme("bearer")
+                                .bearerFormat("JWT")
+                                .description("Bearer token from login (currently loaded from TEST_AUTH_TOKEN in .env)")));
     }
 }
