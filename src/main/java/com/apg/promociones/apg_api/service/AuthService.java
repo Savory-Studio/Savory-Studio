@@ -4,14 +4,17 @@ import com.apg.promociones.apg_api.dto.LoginDTOs.LoginRequest;
 import com.apg.promociones.apg_api.dto.LoginDTOs.LoginResponse;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterRequest;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.repository.UserRepository;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 @Service
@@ -29,32 +32,39 @@ public class AuthService {
     }
 
     public RegisterResponse register(RegisterRequest request) {
-        // RN-16: Validar unicidad del correo
-        if (userRepository.existsByEmail(request.getEmail())) {
-            throw new BusinessRuleException("Email address is already registered.");
+        if (request.getPassword().getBytes(StandardCharsets.UTF_8).length > 72) {
+            throw new BadRequestException("Password exceeds the 72-byte BCrypt limit.");
         }
-
-        // RN-15: Encriptar contraseña con BCrypt
         String encodedPassword = passwordEncoder.encode(request.getPassword());
 
         User newUser = User.builder()
                 .firstName(request.getFirstName())
+                .secondName(request.getSecondName())
                 .lastName(request.getLastName())
-                .birthday(request.getBirthDate())
+                .birthday(request.getBirthday())
                 .joinDate(LocalDateTime.now())
                 .email(request.getEmail())
                 .passwordHash(encodedPassword)
                 .build();
 
-        User savedUser = userRepository.save(newUser);
+        User savedUser;
+        try {
+            savedUser = userRepository.saveAndFlush(newUser);
+        } catch (DataIntegrityViolationException ex) {
+            if (userRepository.existsByEmail(request.getEmail())) {
+                throw new BusinessRuleException("Email address is already registered.");
+            }
+            throw ex;
+        }
 
         return RegisterResponse.builder()
-                .userId(savedUser.getId())
+                .id(savedUser.getId())
                 .firstName(savedUser.getFirstName())
+                .secondName(savedUser.getSecondName())
+                .birthday(savedUser.getBirthday())
                 .lastName(savedUser.getLastName())
                 .email(savedUser.getEmail())
-                .createdAt(savedUser.getJoinDate())
-                .message("User registered successfully.")
+                .joinDate(savedUser.getJoinDate())
                 .build();
     }
 

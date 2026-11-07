@@ -1,10 +1,12 @@
 package com.apg.promociones.apg_api.controller;
 
+import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
 import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.service.PromocionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -15,13 +17,31 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/promociones")
 @RequiredArgsConstructor
-@Tag(name = "Promociones", description = "Promotion publishing endpoint")
+@Tag(name = "Promociones", description = "Promotion publishing and catalog endpoints")
 public class PromocionController {
 
     private final PromocionService promocionService;
+
+    @GetMapping("/activas")
+    @ResponseStatus(HttpStatus.OK)
+    @Operation(
+            summary = "Get active promotions",
+            description = "Retrieves the catalog of currently active promotions within their validity dates and available usage limits."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Active promotions retrieved successfully",
+                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ActivePromotionResponse.class)))),
+            @ApiResponse(responseCode = "401", description = "Missing or invalid Bearer token",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public List<ActivePromotionResponse> getActivePromotions() {
+        return promocionService.getActivePromotions();
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

@@ -18,5 +18,5 @@ public class SimulatedAuthProperties {
      * Shared test token accepted as Bearer or as the password of Basic auth.
      * Replaced by JWT in the security sprint.
      */
-    private String token = "test-token";
+    private String token;
 }

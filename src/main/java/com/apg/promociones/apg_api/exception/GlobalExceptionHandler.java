@@ -2,6 +2,7 @@ package com.apg.promociones.apg_api.exception;
 
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
@@ -18,27 +19,30 @@ public class GlobalExceptionHandler {
         return new ErrorResponse(400, ex.getMessage());
     }
 
-    // 401 Unauthorized — missing simulated identity headers or test token
+    // 401 Unauthorized — missing or invalid Bearer token
     @ExceptionHandler(UnauthorizedException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ErrorResponse handleUnauthorized(UnauthorizedException ex) {
         return new ErrorResponse(401, ex.getMessage());
     }
 
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ErrorResponse handleAccessDenied(AccessDeniedException ex) {
+        return new ErrorResponse(403, ex.getMessage());
+    }
+
     @ExceptionHandler(MissingRequestHeaderException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public ErrorResponse handleMissingHeader(MissingRequestHeaderException ex) {
-        if ("X-User-Id".equalsIgnoreCase(ex.getHeaderName())) {
-            return new ErrorResponse(401, "The X-User-Id header is missing.");
-        }
         return new ErrorResponse(401, "The header is missing in the request: " + ex.getHeaderName());
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
-        if ("X-User-Id".equalsIgnoreCase(ex.getName()) || "userId".equals(ex.getName())) {
-            return new ErrorResponse(400, "The X-User-Id must be a positive integer.");
+        if ("userId".equals(ex.getName())) {
+            return new ErrorResponse(400, "The userId must be a positive integer.");
         }
         return new ErrorResponse(400, "The value of " + ex.getName() + " is invalid.");
     }
