@@ -36,7 +36,8 @@ public class SimulatedAuthFilter extends OncePerRequestFilter {
         if (!path.startsWith("/api/")) {
             return true;
         }
-        return "POST".equalsIgnoreCase(request.getMethod()) && "/api/auth/register".equals(path);
+        // Ignorar autenticación simulada para cualquier endpoint de autenticación (/api/auth/login, /api/auth/register, etc.)
+        return path.startsWith("/api/auth/");
     }
 
     @Override
