@@ -1,5 +1,6 @@
 package com.apg.promociones.apg_api.controller;
 
+import com.apg.promociones.apg_api.config.OpenApiConfig;
 import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
@@ -11,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +24,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/promociones")
 @RequiredArgsConstructor
-@Tag(name = "Promociones", description = "Promotion publishing and catalog endpoints")
+@Tag(name = "Promociones", description = "Promotion publishing and active catalog endpoints (requires JWT Bearer token)")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
 public class PromocionController {
 
     private final PromocionService promocionService;
@@ -36,7 +39,7 @@ public class PromocionController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Active promotions retrieved successfully",
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = ActivePromotionResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid Bearer token",
+            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public List<ActivePromotionResponse> getActivePromotions() {
@@ -50,8 +53,11 @@ public class PromocionController {
             description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Promotion created successfully"),
+            @ApiResponse(responseCode = "201", description = "Promotion created successfully",
+                    content = @Content(schema = @Schema(implementation = PromocionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Validation error",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Restaurant not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))

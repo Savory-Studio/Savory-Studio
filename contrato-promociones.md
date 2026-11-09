@@ -1,7 +1,42 @@
-# REST Contract — Promotion Publishing
+# REST Contract — Promotion Publishing & Active Catalog
 
-**Jira Subtask:** [BE] APG-XX
+**Jira Subtask:** [BE] APG-22 · APG-41 · APG-43 · [INT] APG-71
 **Traceability:** RF-01 · RN-06 · RN-07 · RN-08 · RN-09
+
+---
+
+## GET /api/promociones/activas
+
+### Description
+
+Retrieves the catalog of currently active promotions (`discount_status = 'Active'`) that are within their validity dates (`start_timestamp <= NOW() < end_timestamp`) and have remaining usage capacity (`USED count < max_uses`).
+
+### Success Response
+
+**HTTP 200 OK**
+
+```json
+[
+  {
+    "discountId": 5,
+    "restaurantId": 1,
+    "restaurantName": "Savory Grill",
+    "name": "Lunch 20% off",
+    "applicableProducts": "Executive menu",
+    "type": "PERCENTAGE",
+    "amount": 20.00,
+    "customerTakesAmount": null,
+    "customerPaysAmount": null,
+    "status": "Active",
+    "startTimestamp": "2026-10-26T08:00:00",
+    "endTimestamp": "2026-11-26T23:59:00",
+    "maxUses": 100,
+    "maxUseAmountPerUser": 2,
+    "imageUrl": "https://example.com/promo.jpg",
+    "additionalUseConditions": "Valid Monday through Friday"
+  }
+]
+```
 
 ---
 
@@ -94,13 +129,12 @@ Side effects on success:
 | 400  | Both `endTimestamp` and `maxUses` are null | "Debe especificar fecha de vencimiento o límite de usos (o ambos)." | RN-09 |
 | 400  | `startTimestamp` ≥ `endTimestamp` | "La fecha de inicio debe ser anterior a la fecha de vencimiento." | — |
 | 400  | Malformed JSON or unreadable body | "El cuerpo de la petición es inválido o está vacío." | — |
+| 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
 | 404  | `restaurantId` does not exist | "Restaurante no encontrado." | — |
 
 ### Authorization
 
-Restaurant owner only — validated via JWT bearer token (implementation
-deferred to the security sprint). During Sprint 1, the endpoint is open
-for functional testing.
+Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
 
 ### Business Rules
 
@@ -115,19 +149,19 @@ for functional testing.
 
 | Test Case | Scenario | Expected | Status |
 |-----------|----------|----------|--------|
-| PP-01 | Valid promotion with type PERCENTAGE, all fields | 201 Created | Pending |
-| PP-02 | Valid promotion with type IXJ, correct takes > pays | 201 Created | Pending |
-| PP-03 | Valid promotion with type FIXED_VALUE | 201 Created | Pending |
-| PP-04 | Missing required field (name, applicableProducts, type) | 400 Bad Request | Pending |
-| PP-05 | PERCENTAGE with amount = 0 or amount > 100 | 400 Bad Request | Pending |
-| PP-06 | IXJ with customerTakesAmount ≤ customerPaysAmount | 400 Bad Request | Pending |
-| PP-07 | Both endTimestamp and maxUses are null | 400 Bad Request | Pending |
-| PP-08 | startTimestamp ≥ endTimestamp | 400 Bad Request | Pending |
-| PP-09 | Non-existent restaurantId | 404 Not Found | Pending |
-| PP-10 | Malformed or empty JSON body | 400 Bad Request | Pending |
+| PP-01 | Valid promotion with type PERCENTAGE, all fields | 201 Created | Automated |
+| PP-02 | Valid promotion with type IXJ, correct takes > pays | 201 Created | Automated |
+| PP-03 | Valid promotion with type FIXED_VALUE | 201 Created | Automated |
+| PP-04 | Missing required field (name, applicableProducts, type) | 400 Bad Request | Automated |
+| PP-05 | PERCENTAGE with amount = 0 or amount > 100 | 400 Bad Request | Automated |
+| PP-06 | IXJ with customerTakesAmount ≤ customerPaysAmount | 400 Bad Request | Automated |
+| PP-07 | Both endTimestamp and maxUses are null | 400 Bad Request | Automated |
+| PP-08 | startTimestamp ≥ endTimestamp | 400 Bad Request | Automated |
+| PP-09 | Non-existent restaurantId | 404 Not Found | Automated |
+| PP-10 | Malformed or empty JSON body | 400 Bad Request | Automated |
 
 ### Data Model Dependencies
 
 This contract operates on:
-- `discounts` (all columns — this is the target table for insertion)
+- `discounts` (all columns — this is the target table for insertion and active catalog queries)
 - `restaurants` (restaurant_id — validated via `restaurantId` in request)

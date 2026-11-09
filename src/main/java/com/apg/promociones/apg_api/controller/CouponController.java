@@ -1,5 +1,6 @@
 package com.apg.promociones.apg_api.controller;
 
+import com.apg.promociones.apg_api.config.OpenApiConfig;
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
@@ -12,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +31,8 @@ import java.util.List;
 @RestController
 @RequestMapping({"/api/coupons", "/api/cupones"})
 @RequiredArgsConstructor
-@Tag(name = "Coupons", description = "Customer coupon management endpoints")
+@Tag(name = "Coupons", description = "Customer coupon management endpoints (requires JWT Bearer token)")
+@SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
 public class CouponController {
 
     private final AssociatePromotionService associatePromotionService;
@@ -45,7 +48,7 @@ public class CouponController {
                     content = @Content(array = @ArraySchema(schema = @Schema(implementation = UserCouponResponse.class)))),
             @ApiResponse(responseCode = "400", description = "Invalid userId parameter",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid Bearer token",
+            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "User not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
@@ -63,10 +66,11 @@ public class CouponController {
             description = "Creates an UNUSED coupon linking the customer and the promotion after verifying that the promotion exists and is currently valid."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Promotion associated with the customer profile"),
+            @ApiResponse(responseCode = "201", description = "Promotion associated with the customer profile",
+                    content = @Content(schema = @Schema(implementation = AssociatePromotionResponse.class))),
             @ApiResponse(responseCode = "400", description = "Missing or invalid request data",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Missing or invalid Bearer token",
+            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "User or promotion does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
