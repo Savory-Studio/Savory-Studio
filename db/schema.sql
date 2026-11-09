@@ -86,6 +86,10 @@ CREATE TABLE coupon (
     )
 );
 
+CREATE UNIQUE INDEX uq_unused_coupon_per_user_promotion
+    ON coupon (user_id, discount_id)
+    WHERE coupon_status = 'UNUSED';
+
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE restaurants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE discounts ENABLE ROW LEVEL SECURITY;

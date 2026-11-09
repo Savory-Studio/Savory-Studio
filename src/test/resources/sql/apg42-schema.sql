@@ -63,3 +63,7 @@ CREATE TABLE coupon (
         OR (coupon_status = 'USED' AND coupon_redemption_timestamp IS NOT NULL
             AND coupon_redemption_timestamp >= coupon_claim_timestamp))
 );
+
+CREATE UNIQUE INDEX uq_unused_coupon_per_user_promotion
+    ON coupon (user_id, discount_id)
+    WHERE coupon_status = 'UNUSED';
