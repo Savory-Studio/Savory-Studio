@@ -17,6 +17,7 @@ import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.UserRepository;
 import com.apg.promociones.apg_api.util.CouponHashGenerator;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,7 +75,11 @@ public class AssociatePromotionService {
                 .couponHash(CouponHashGenerator.generate())
                 .claimTimestamp(now)
                 .build();
-        coupon = couponRepository.save(coupon);
+        try {
+            coupon = couponRepository.saveAndFlush(coupon);
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessRuleException("This promotion is already associated with the customer profile.");
+        }
 
         return AssociatePromotionResponse.builder()
                 .couponId(coupon.getId())

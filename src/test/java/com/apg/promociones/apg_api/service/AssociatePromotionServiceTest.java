@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -136,7 +137,7 @@ class AssociatePromotionServiceTest {
         when(userRepository.findById(10)).thenReturn(Optional.of(user));
         when(discountRepository.findById(20)).thenReturn(Optional.of(discount));
         when(couponRepository.existsUnusedByUserAndDiscount(10, 20)).thenReturn(false);
-        when(couponRepository.save(any(Coupon.class))).thenAnswer(invocation -> {
+        when(couponRepository.saveAndFlush(any(Coupon.class))).thenAnswer(invocation -> {
             Coupon coupon = invocation.getArgument(0);
             coupon.setId(99);
             return coupon;
@@ -151,7 +152,7 @@ class AssociatePromotionServiceTest {
         assertEquals("Promoción guardada en el perfil del cliente.", response.getMessage());
 
         ArgumentCaptor<Coupon> captor = ArgumentCaptor.forClass(Coupon.class);
-        verify(couponRepository).save(captor.capture());
+        verify(couponRepository).saveAndFlush(captor.capture());
         assertEquals(CouponStatus.UNUSED, captor.getValue().getStatus());
         assertEquals(user, captor.getValue().getUser());
         assertEquals(discount, captor.getValue().getDiscount());
@@ -166,7 +167,7 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("User not found.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -179,7 +180,7 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("Promotion not found.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -193,7 +194,7 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is no longer available.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -207,7 +208,7 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion has expired.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -221,7 +222,7 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is not active yet.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -235,6 +236,21 @@ class AssociatePromotionServiceTest {
                 () -> associatePromotionService.associate(10, request));
 
         assertEquals("This promotion is already associated with the customer profile.", ex.getMessage());
-        verify(couponRepository, never()).save(any());
+        verify(couponRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void throws409WhenConcurrentInsertViolatesUniqueIndex() {
+        when(userRepository.findById(10)).thenReturn(Optional.of(user));
+        when(discountRepository.findById(20)).thenReturn(Optional.of(discount));
+        when(couponRepository.existsUnusedByUserAndDiscount(10, 20)).thenReturn(false);
+        when(couponRepository.saveAndFlush(any(Coupon.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        BusinessRuleException ex = assertThrows(
+                BusinessRuleException.class,
+                () -> associatePromotionService.associate(10, request));
+
+        assertEquals("This promotion is already associated with the customer profile.", ex.getMessage());
     }
 }
