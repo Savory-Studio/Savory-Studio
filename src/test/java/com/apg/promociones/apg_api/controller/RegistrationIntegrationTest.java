@@ -4,12 +4,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -22,6 +24,7 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -68,6 +71,38 @@ class RegistrationIntegrationTest {
         String hash = jdbc.queryForObject("SELECT user_password_hash FROM users WHERE user_email = ?",
                 String.class, email);
         assertTrue(encoder.matches("Password123", hash));
+    }
+
+    @Test
+    void registeredUserCanLoginReceiveJwtAndAccessProtectedEndpoints() throws Exception {
+        String email = "jwt-login@example.test";
+        register(request(email, "Password123"))
+                .andExpect(status().isCreated());
+
+        MvcResult loginResult = mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"Password123"}
+                                """.formatted(email)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.message").value("Authentication successful."))
+                .andReturn();
+
+        String body = loginResult.getResponse().getContentAsString();
+        String jwtToken = body.split("\"token\":\"")[1].split("\"")[0];
+
+        mvc.perform(get("/api/promociones/activas")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken))
+                .andExpect(status().isOk());
+
+        String tamperedJwt = jwtToken.substring(0, jwtToken.length() - 4) + "XXXX";
+        mvc.perform(get("/api/promociones/activas")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + tamperedJwt))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401));
     }
 
     @Test

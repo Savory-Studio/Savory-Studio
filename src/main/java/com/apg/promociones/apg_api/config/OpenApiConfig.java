@@ -19,8 +19,13 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Savory Studio — Promotions & Coupons API")
                         .version("v1")
-                        .description("Protected endpoints require a Bearer token in the Authorization header "
-                                + "(configured via TEST_AUTH_TOKEN in .env until the login endpoint issues JWT tokens)."))
+                        .description("REST API for restaurant promotion publishing, active catalog queries, "
+                                + "customer coupon claiming, and QR/UUID coupon redemption.\n\n"
+                                + "**Authentication & Route Protection (JWT Bearer):**\n"
+                                + "- **Public routes:** `POST /api/auth/register` and `POST /api/auth/login` do not require a token.\n"
+                                + "- **Protected routes:** `/api/promociones/**`, `/api/coupons/**`, `/api/cupones/**`, and `/api/canjes/**` "
+                                + "require `Authorization: Bearer <token>`.\n"
+                                + "- Authenticate via `POST /api/auth/login` to obtain a signed HS256 JWT token, then click **Authorize** and paste the token."))
                 .addSecurityItem(new SecurityRequirement()
                         .addList(BEARER_AUTH_SCHEME))
                 .components(new Components()
@@ -28,6 +33,6 @@ public class OpenApiConfig {
                                 .type(SecurityScheme.Type.HTTP)
                                 .scheme("bearer")
                                 .bearerFormat("JWT")
-                                .description("Bearer token from login (currently loaded from TEST_AUTH_TOKEN in .env)")));
+                                .description("Signed HS256 JWT token issued by POST /api/auth/login (or TEST_AUTH_TOKEN in test environments).")));
     }
 }

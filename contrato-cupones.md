@@ -1,11 +1,54 @@
-# REST Contract — Coupon Claiming (Save Coupon)
+# REST Contract — Coupon Claiming & Customer Coupon History
 
-**Jira Subtask:** [BE] APG-XX
+**Jira Subtask:** [BE] APG-32 · APG-43 · [INT] APG-71
 **Traceability:** RF-02 · RN-10 · RN-11 · RN-12 · RN-13
 
 ---
 
-## POST /api/coupons
+## GET /api/cupones/usuario/{userId} (Alias: `/api/coupons/usuario/{userId}`)
+
+### Description
+
+Retrieves all coupons (`UNUSED` and `USED`) claimed by the specified customer, retaining their full redemption history along with promotion and restaurant details.
+
+### Success Response
+
+**HTTP 200 OK**
+
+```json
+[
+  {
+    "couponId": 15,
+    "userId": 10,
+    "promotionId": 20,
+    "promotionName": "2x1 Lunch",
+    "restaurantId": 1,
+    "restaurantName": "Savory Grill",
+    "type": "IXJ",
+    "amount": null,
+    "customerTakesAmount": 2,
+    "customerPaysAmount": 1,
+    "couponHash": "a3f1b2c4-d5e6-7890-abcd-ef1234567890",
+    "status": "UNUSED",
+    "claimTimestamp": "2026-10-30T14:35:00",
+    "redemptionTimestamp": null,
+    "endTimestamp": "2026-11-26T23:59:00",
+    "imageUrl": "https://example.com/promo.jpg"
+  }
+]
+```
+
+### Error Responses (`GET /api/cupones/usuario/{userId}`)
+
+| Code | Scenario | Message |
+|------|----------|---------|
+| 400  | `userId <= 0` or non-integer path value | "The userId must be a positive integer." |
+| 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." |
+| 404  | `userId` does not exist | "User not found." |
+
+---
+
+## POST /api/coupons (Alias: `/api/cupones`)
 
 ### Description
 
@@ -47,13 +90,14 @@ Side effects on success:
 - `coupon_claim_timestamp` is set to the current server time
 - `coupon_hash` is auto-generated (UUID v4, unique per coupon)
 
-### Error Responses
+### Error Responses (`POST /api/coupons`)
 
 | Code | Scenario | Message | Rule |
 |------|----------|---------|------|
 | 400  | `userId` missing or null | "The userId field is required." | — |
 | 400  | `promotionId` missing or null | "The promotionId field is required." | — |
 | 400  | Malformed JSON or empty body | "El cuerpo de la petición es inválido o está vacío." | — |
+| 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
 | 404  | `userId` does not exist | "User not found." | — |
 | 404  | `promotionId` does not exist | "Promotion not found." | — |
 | 409  | `discount_status` is not `Active` | "This promotion is no longer available." | RN-10 |
@@ -68,9 +112,7 @@ No coupon is created, no hash is generated, and no timestamp is written.
 
 ### Authorization
 
-Customer only — validated via JWT bearer token (implementation deferred
-to the security sprint). During Sprint 1, the endpoint is open for
-functional testing.
+Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
 
 ### Business Rules
 
@@ -85,19 +127,19 @@ functional testing.
 
 | Test Case | Scenario | Expected | Status |
 |-----------|----------|----------|--------|
-| GC-01 | Valid userId + promotionId, active promotion | 201 Created with couponHash | Pending |
-| GC-02 | Non-existent userId | 404 Not Found | Pending |
-| GC-03 | Non-existent promotionId | 404 Not Found | Pending |
-| GC-04 | Promotion with status Finished or Suspended | 409 Conflict | Pending |
-| GC-05 | Promotion not started yet | 409 Conflict | Pending |
-| GC-06 | Promotion already expired | 409 Conflict | Pending |
-| GC-07 | Duplicate claim (UNUSED coupon already exists) | 409 Conflict | Pending |
-| GC-08 | Missing or empty request body | 400 Bad Request | Pending |
-| GC-09 | couponHash is unique UUID v4 format | Validate format | Pending |
+| GC-01 | Valid userId + promotionId, active promotion | 201 Created with couponHash | Automated |
+| GC-02 | Non-existent userId | 404 Not Found | Automated |
+| GC-03 | Non-existent promotionId | 404 Not Found | Automated |
+| GC-04 | Promotion with status Finished or Suspended | 409 Conflict | Automated |
+| GC-05 | Promotion not started yet | 409 Conflict | Automated |
+| GC-06 | Promotion already expired | 409 Conflict | Automated |
+| GC-07 | Duplicate claim (UNUSED coupon already exists) | 409 Conflict | Automated |
+| GC-08 | Missing or empty request body | 400 Bad Request | Automated |
+| GC-09 | couponHash is unique UUID v4 format | Validate format | Automated |
 
 ### Data Model Dependencies
 
 This contract operates on:
-- `coupon` (coupon_id, user_id, discount_id, coupon_status, coupon_hash, coupon_claim_timestamp)
+- `coupon` (coupon_id, user_id, discount_id, coupon_status, coupon_hash, coupon_claim_timestamp, coupon_redemption_timestamp)
 - `discounts` (discount_id, discount_status, discount_start_timestamp, discount_end_timestamp)
 - `users` (user_id)
