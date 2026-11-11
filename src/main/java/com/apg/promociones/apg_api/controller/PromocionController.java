@@ -17,7 +17,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
@@ -28,41 +33,31 @@ import java.util.List;
 @SecurityRequirement(name = OpenApiConfig.BEARER_AUTH_SCHEME)
 public class PromocionController {
 
-    private final PromocionService promocionService;
+        private final PromocionService promocionService;
 
-    @GetMapping("/activas")
-    @ResponseStatus(HttpStatus.OK)
-    @Operation(
-            summary = "Get active promotions",
-            description = "Retrieves the catalog of currently active promotions within their validity dates and available usage limits."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Active promotions retrieved successfully",
-                    content = @Content(array = @ArraySchema(schema = @Schema(implementation = ActivePromotionResponse.class)))),
-            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public List<ActivePromotionResponse> getActivePromotions() {
-        return promocionService.getActivePromotions();
-    }
+        @GetMapping("/activas")
+        @ResponseStatus(HttpStatus.OK)
+        @Operation(summary = "Get active promotions", description = "Retrieves the catalog of currently active promotions within their validity dates and available usage limits.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "200", description = "Active promotions retrieved successfully", content = @Content(array = @ArraySchema(schema = @Schema(implementation = ActivePromotionResponse.class)))),
+                        @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+        })
+        public List<ActivePromotionResponse> getActivePromotions() {
+                return promocionService.getActivePromotions();
+        }
 
-    @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    @Operation(
-            summary = "Publish a new promotion",
-            description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits."
-    )
-    @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Promotion created successfully",
-                    content = @Content(schema = @Schema(implementation = PromocionResponse.class))),
-            @ApiResponse(responseCode = "400", description = "Validation error",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Restaurant not found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
-    })
-    public PromocionResponse create(@Valid @RequestBody PromocionRequest request) {
-        return promocionService.create(request);
-    }
+        @PostMapping
+        @ResponseStatus(HttpStatus.CREATED)
+        @Operation(summary = "Publish a new promotion", description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits.")
+        @ApiResponses({
+                        @ApiResponse(responseCode = "201", description = "Promotion created successfully", content = @Content(schema = @Schema(implementation = PromocionResponse.class))),
+                        @ApiResponse(responseCode = "400", description = "Validation error", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Authenticated user does not own the restaurant", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "404", description = "Restaurant not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+        })
+        public PromocionResponse create(@Valid @RequestBody PromocionRequest request) {
+                return promocionService.create(request);
+        }
+
 }

@@ -31,8 +31,16 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        .requestMatchers("/api/**").permitAll() // Enforced by SimulatedAuthFilter (JWT / Bearer token)
-                        .anyRequest().permitAll()
+                        .requestMatchers("/error").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, authException) -> {
+                            response.setStatus(401);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            response.getWriter().write("{\"status\":401,\"message\":\"The Bearer token is missing. Send Authorization: Bearer <token>.\"}");
+                        })
                 )
                 .addFilterBefore(simulatedAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
