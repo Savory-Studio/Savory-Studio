@@ -9,12 +9,13 @@ import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
+import com.apg.promociones.apg_api.repository.CouponRepository;
+import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.security.SecurityUtils;
-import org.springframework.security.access.AccessDeniedException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.apg.promociones.apg_api.repository.CouponRepository;
 
 import java.time.LocalDateTime;
 
@@ -23,11 +24,23 @@ import java.time.LocalDateTime;
 public class CanjeService {
 
     private final CouponRepository couponRepository;
+    private final DiscountRepository discountRepository;
 
     /**
      * Validates and processes a coupon redemption.
      * Applies business rules RN-01 through RN-05 in sequence.
      * On any rule violation, throws an exception — no DB state is modified.
+     * <p>
+     * Concurrency strategy (APG-65): {@code @Transactional} alone does not prevent two simultaneous
+     * requests from reading the same state, so the transaction takes PostgreSQL row locks
+     * ({@code SELECT ... FOR UPDATE}) before evaluating any rule:
+     * <ol>
+     *   <li>the coupon row, so concurrent redemptions of the same coupon are serialized (RN-01);</li>
+     *   <li>the discount row, so redemptions of different coupons of the same promotion are serialized
+     *       and the usage counts of RN-04 / RN-05 are read after the previous redemption committed.</li>
+     * </ol>
+     * Locks are always taken in the same order (coupon, then discount) and are released on commit or
+     * rollback, so a rejected request leaves the data untouched and no deadlock cycle can form.
      */
     @Transactional
     public CanjeResponse redeem(CanjeRequest request) {
@@ -37,21 +50,23 @@ public class CanjeService {
             throw new BadRequestException("Debe proporcionar couponId o couponHash.");
         }
 
-        // --- Fetch coupon by hash (priority) or by ID ---
+        // --- Fetch and lock the coupon by hash (priority) or by ID ---
         Coupon coupon;
         if (request.getCouponHash() != null) {
-            coupon = couponRepository.findByCouponHash(request.getCouponHash())
+            coupon = couponRepository.findByCouponHashForUpdate(request.getCouponHash())
                     .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
         } else {
-            coupon = couponRepository.findById(request.getCouponId())
+            coupon = couponRepository.findByIdForUpdate(request.getCouponId())
                     .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
         }
 
-        Discount discount = coupon.getDiscount();
+        // --- Lock the discount row (getId() on the lazy reference does not load the discount) ---
+        Discount discount = discountRepository.findByIdForUpdate(coupon.getDiscount().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Promoción no encontrada."));
 
         // --- Contextual authorization: ensure requester owns the restaurant of the discount ---
         SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
-            if (discount != null && discount.getRestaurant() != null && discount.getRestaurant().getOwner() != null) {
+            if (discount.getRestaurant() != null && discount.getRestaurant().getOwner() != null) {
                 Integer ownerId = discount.getRestaurant().getOwner().getId();
                 if (!authUserId.equals(ownerId)) {
                     throw new AccessDeniedException("Usuario no tiene permiso para canjear cupones de este restaurante.");
@@ -95,11 +110,11 @@ public class CanjeService {
             }
         }
 
-        // --- All rules pass — execute redemption ---
+        // --- All rules pass — execute redemption (flushed while both row locks are still held) ---
         LocalDateTime now = LocalDateTime.now();
         coupon.setStatus(CouponStatus.USED);
         coupon.setRedemptionTimestamp(now);
-        couponRepository.save(coupon);
+        couponRepository.saveAndFlush(coupon);
 
         return CanjeResponse.builder()
                 .couponId(coupon.getId())

@@ -1,6 +1,9 @@
 package com.apg.promociones.apg_api.exception;
 
 import com.apg.promociones.apg_api.dto.ErrorResponse;
+import jakarta.persistence.LockTimeoutException;
+import jakarta.persistence.PessimisticLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -52,6 +55,17 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handleBusinessRule(BusinessRuleException ex) {
         return new ErrorResponse(409, ex.getMessage());
+    }
+
+    // 409 Conflict — pessimistic locking or concurrent transaction contention (APG-65)
+    @ExceptionHandler({
+            PessimisticLockingFailureException.class,
+            PessimisticLockException.class,
+            LockTimeoutException.class
+    })
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleConcurrencyConflict(Exception ex) {
+        return new ErrorResponse(409, "No se pudo completar la operación por otra petición concurrente. Intente nuevamente.");
     }
 
     // 404 Not Found — coupon, user or promotion does not exist
