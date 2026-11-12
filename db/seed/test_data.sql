@@ -1,11 +1,11 @@
 -- =============================================================
--- Seed: test data for the 4 tables
+-- Seed: test data for the 5 tables
 -- Idempotent: uses ON CONFLICT DO NOTHING
 -- =============================================================
 
 -- Only seed isolated test databases. Keep the fixed IDs and their sequences in sync.
 BEGIN;
-LOCK TABLE users, restaurants, discounts, coupon IN SHARE ROW EXCLUSIVE MODE;
+LOCK TABLE users, restaurants, discounts, coupon, restaurant_staff IN SHARE ROW EXCLUSIVE MODE;
 
 -- Users (passwords are BCrypt hashes of 'password123')
 INSERT INTO users (user_id, user_first_name, user_second_name, user_last_name, user_birthday, user_email, user_password_hash)
@@ -62,13 +62,21 @@ VALUES
      'a1b2c3d4-e5f6-7890-abcd-000000000003')
 ON CONFLICT (coupon_id) DO NOTHING;
 
+-- Restaurant staff: user 3 authorized at restaurant 1 (owned by user 1)
+INSERT INTO restaurant_staff (staff_id, user_id, restaurant_id)
+VALUES
+    (1, 3, 1),
+    (2, 2, 1)
+ON CONFLICT (staff_id) DO NOTHING;
+
 -- Explicit identity values do not advance the sequence. Never rewind a sequence on retry.
 SELECT setval(sequence_name, highest_id)
 FROM (VALUES
     (pg_get_serial_sequence('users', 'user_id')::regclass, (SELECT max(user_id) FROM users)),
     (pg_get_serial_sequence('restaurants', 'restaurant_id')::regclass, (SELECT max(restaurant_id) FROM restaurants)),
     (pg_get_serial_sequence('discounts', 'discount_id')::regclass, (SELECT max(discount_id) FROM discounts)),
-    (pg_get_serial_sequence('coupon', 'coupon_id')::regclass, (SELECT max(coupon_id) FROM coupon))
+    (pg_get_serial_sequence('coupon', 'coupon_id')::regclass, (SELECT max(coupon_id) FROM coupon)),
+    (pg_get_serial_sequence('restaurant_staff', 'staff_id')::regclass, (SELECT max(staff_id) FROM restaurant_staff))
 ) AS seeded_sequences(sequence_name, highest_id)
 WHERE COALESCE(pg_sequence_last_value(sequence_name), 0) < highest_id;
 
