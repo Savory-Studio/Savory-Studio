@@ -2,21 +2,25 @@ package com.apg.promociones.apg_api.security;
 
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
 
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Date;
+import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class SimulatedAuthFilterTest {
 
@@ -64,10 +68,17 @@ class SimulatedAuthFilterTest {
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + jwt);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        AtomicReference<Integer> capturedUserId = new AtomicReference<>();
+        doAnswer(invocation -> {
+            capturedUserId.set(SecurityUtils.getCurrentUserId().orElse(null));
+            return null;
+        }).when(chain).doFilter(request, response);
+
         filter.doFilter(request, response, chain);
 
         verify(chain).doFilter(request, response);
         assertEquals(200, response.getStatus());
+        assertEquals(12, capturedUserId.get());
     }
 
     @Test
@@ -115,15 +126,65 @@ class SimulatedAuthFilterTest {
     }
 
     @Test
+    void rejectsJwtWithNonNumericSubject() throws Exception {
+        SecretKey key = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
+        String jwt = Jwts.builder()
+                .setSubject("not-a-number")
+                .setExpiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+
+        MockHttpServletRequest request = apiRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + jwt);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain, never()).doFilter(request, response);
+        assertEquals(401, response.getStatus());
+        assertTrue(response.getContentAsString().contains("invalid or expired"));
+    }
+
+    @Test
     void acceptsValidBearerFallbackTokenWithoutExtraHeaders() throws Exception {
         MockHttpServletRequest request = apiRequest();
         request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test_token_123");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
+        AtomicReference<Boolean> authenticatedDuringChain = new AtomicReference<>(false);
+        doAnswer(invocation -> {
+            authenticatedDuringChain.set(
+                    SecurityContextHolder.getContext().getAuthentication() != null
+                            && SecurityContextHolder.getContext().getAuthentication().isAuthenticated()
+            );
+            return null;
+        }).when(chain).doFilter(request, response);
+
         filter.doFilter(request, response, chain);
 
         verify(chain).doFilter(request, response);
         assertEquals(200, response.getStatus());
+        assertTrue(authenticatedDuringChain.get());
+    }
+
+    @Test
+    void acceptsValidBearerFallbackTokenWithUserIdHeader() throws Exception {
+        MockHttpServletRequest request = apiRequest();
+        request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer test_token_123");
+        request.addHeader("X-User-Id", "42");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        AtomicReference<Integer> capturedUserId = new AtomicReference<>();
+        doAnswer(invocation -> {
+            capturedUserId.set(SecurityUtils.getCurrentUserId().orElse(null));
+            return null;
+        }).when(chain).doFilter(request, response);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        assertEquals(200, response.getStatus());
+        assertEquals(42, capturedUserId.get());
     }
 
     @Test

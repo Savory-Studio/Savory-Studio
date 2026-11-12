@@ -9,10 +9,12 @@ import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
-import com.apg.promociones.apg_api.repository.CouponRepository;
+import com.apg.promociones.apg_api.security.SecurityUtils;
+import org.springframework.security.access.AccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.apg.promociones.apg_api.repository.CouponRepository;
 
 import java.time.LocalDateTime;
 
@@ -46,6 +48,16 @@ public class CanjeService {
         }
 
         Discount discount = coupon.getDiscount();
+
+        // --- Contextual authorization: ensure requester owns the restaurant of the discount ---
+        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
+            if (discount != null && discount.getRestaurant() != null && discount.getRestaurant().getOwner() != null) {
+                Integer ownerId = discount.getRestaurant().getOwner().getId();
+                if (!authUserId.equals(ownerId)) {
+                    throw new AccessDeniedException("Usuario no tiene permiso para canjear cupones de este restaurante.");
+                }
+            }
+        });
 
         // --- RN-01: coupon already used ---
         if (coupon.getStatus() == CouponStatus.USED) {

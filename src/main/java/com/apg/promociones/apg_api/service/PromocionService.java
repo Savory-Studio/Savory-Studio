@@ -11,7 +11,9 @@ import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
+import com.apg.promociones.apg_api.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,14 @@ public class PromocionService {
 
         Restaurant restaurant = restaurantRepository.findById(request.getRestaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante no encontrado."));
+
+        // Contextual authorization: ensure authenticated user is the restaurant owner
+        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
+            Integer ownerId = restaurant.getOwner() != null ? restaurant.getOwner().getId() : null;
+            if (ownerId != null && !ownerId.equals(authUserId)) {
+                throw new AccessDeniedException("Usuario no tiene permiso para crear promociones en este restaurante.");
+            }
+        });
 
         DiscountType type;
         try {
