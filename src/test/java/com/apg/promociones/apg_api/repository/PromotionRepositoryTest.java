@@ -82,7 +82,7 @@ class PromotionRepositoryTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"Suspended", "Finished"})
+    @ValueSource(strings = { "Suspended", "Finished" })
     void excludesInactivePromotions(String status) {
         createDiscount(status, null);
 
@@ -92,7 +92,9 @@ class PromotionRepositoryTest {
     @Test
     void excludesActiveButExpiredPromotion() {
         int id = createDiscount("Active", null);
-        jdbc.update("UPDATE discounts SET discount_end_timestamp = CURRENT_TIMESTAMP - INTERVAL '1 day' WHERE discount_id = ?", id);
+        jdbc.update(
+                "UPDATE discounts SET discount_end_timestamp = CURRENT_TIMESTAMP - INTERVAL '1 day' WHERE discount_id = ?",
+                id);
 
         assertTrue(discountRepository.findActivePromotions().isEmpty());
     }
@@ -100,7 +102,9 @@ class PromotionRepositoryTest {
     @Test
     void excludesFuturePromotion() {
         int id = createDiscount("Active", null);
-        jdbc.update("UPDATE discounts SET discount_start_timestamp = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE discount_id = ?", id);
+        jdbc.update(
+                "UPDATE discounts SET discount_start_timestamp = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE discount_id = ?",
+                id);
 
         assertTrue(discountRepository.findActivePromotions().isEmpty());
     }
@@ -138,12 +142,14 @@ class PromotionRepositoryTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"UTC", "America/Bogota"})
+    @ValueSource(strings = { "UTC", "America/Bogota" })
     void usesDatabaseTimeAcrossSessionTimeZones(String timezone) {
         jdbc.queryForObject("SELECT set_config('TimeZone', ?, true)", String.class, timezone);
         int currentId = createDiscount("Active", null);
         int expiredId = createDiscount("Active", null);
-        jdbc.update("UPDATE discounts SET discount_end_timestamp = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE discount_id = ?", expiredId);
+        jdbc.update(
+                "UPDATE discounts SET discount_end_timestamp = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE discount_id = ?",
+                expiredId);
 
         assertEquals(List.of(currentId), activeIds());
     }
@@ -191,7 +197,8 @@ class PromotionRepositoryTest {
         assertEquals(2, result.size());
         assertTrue(result.stream().allMatch(c -> c.getUser().getId().equals(customerId)));
         assertTrue(result.stream().map(Coupon::getId).toList().containsAll(List.of(unusedId, usedId)));
-        assertTrue(result.stream().map(Coupon::getStatus).toList().containsAll(List.of(CouponStatus.UNUSED, CouponStatus.USED)));
+        assertTrue(result.stream().map(Coupon::getStatus).toList()
+                .containsAll(List.of(CouponStatus.UNUSED, CouponStatus.USED)));
         assertTrue(result.stream().allMatch(c -> c.getCouponHash() != null));
     }
 
@@ -212,7 +219,8 @@ class PromotionRepositoryTest {
 
         assertEquals(couponId, couponRepository.findByCouponHash(coupon.getCouponHash()).orElseThrow().getId());
         assertEquals(1, couponRepository.countByDiscountAndStatus(coupon.getDiscount(), CouponStatus.USED));
-        assertEquals(1, couponRepository.countByUserAndDiscountAndStatus(coupon.getUser(), coupon.getDiscount(), CouponStatus.USED));
+        assertEquals(1, couponRepository.countByUserAndDiscountAndStatus(coupon.getUser(), coupon.getDiscount(),
+                CouponStatus.USED));
         assertTrue(couponRepository.existsUnusedByUserAndDiscount(otherCustomerId, discountId));
     }
 
@@ -224,10 +232,14 @@ class PromotionRepositoryTest {
         discountRepository.findActivePromotions();
         couponRepository.findByUser_Id(customerId);
 
-        assertEquals("UNUSED", jdbc.queryForObject("SELECT coupon_status::text FROM coupon WHERE coupon_id = ?", String.class, couponId));
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM coupon WHERE coupon_redemption_timestamp IS NOT NULL", Integer.class));
-        assertEquals(2, jdbc.queryForObject("SELECT discount_max_uses FROM discounts WHERE discount_id = ?", Integer.class, id));
-        assertEquals("Active", jdbc.queryForObject("SELECT discount_status::text FROM discounts WHERE discount_id = ?", String.class, id));
+        assertEquals("UNUSED", jdbc.queryForObject("SELECT coupon_status::text FROM coupon WHERE coupon_id = ?",
+                String.class, couponId));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM coupon WHERE coupon_redemption_timestamp IS NOT NULL",
+                Integer.class));
+        assertEquals(2, jdbc.queryForObject("SELECT discount_max_uses FROM discounts WHERE discount_id = ?",
+                Integer.class, id));
+        assertEquals("Active", jdbc.queryForObject("SELECT discount_status::text FROM discounts WHERE discount_id = ?",
+                String.class, id));
     }
 
     @Test

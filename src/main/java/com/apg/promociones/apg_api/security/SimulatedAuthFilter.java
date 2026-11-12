@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -29,6 +30,8 @@ import java.util.Collections;
 @Component
 public class SimulatedAuthFilter extends OncePerRequestFilter {
 
+    public static final String USER_ID_HEADER = "X-User-Id";
+    public static final String RESTAURANT_ID_HEADER = "X-Restaurant-Id";
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final SimulatedAuthProperties properties;
@@ -88,20 +91,69 @@ public class SimulatedAuthFilter extends OncePerRequestFilter {
 
         try {
             if (validJwt) {
+                Integer userId;
                 try {
-                    Integer userId = jwtService.extractUserId(presentedToken);
-                    SimulatedRequestContext.set(new SimulatedCaller(userId, null));
-                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            userId, null, Collections.emptyList());
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                } catch (RuntimeException ignored) {
-                    // Subject is non-numeric; authentication still succeeds for valid signed JWT
+                    userId = jwtService.extractUserId(presentedToken);
+                } catch (RuntimeException ex) {
+                    writeUnauthorized(response, "The Bearer token is invalid or expired.");
+                    return;
                 }
+                if (userId == null || userId <= 0) {
+                    writeUnauthorized(response, "The Bearer token is invalid or expired.");
+                    return;
+                }
+
+                String email = null;
+                try {
+                    email = jwtService.extractEmail(presentedToken);
+                } catch (Exception ignored) {
+                }
+
+                UserPrincipal principal = new UserPrincipal(
+                        userId,
+                        email != null ? email : (userId + "@savory.test"),
+                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        presentedToken,
+                        principal.getAuthorities()
+                );
+                SecurityContextHolder.getContext().setAuthentication(auth);
+                SimulatedRequestContext.set(new SimulatedCaller(userId, null));
+            } else {
+                Integer userId = parsePositiveInt(request.getHeader(USER_ID_HEADER));
+                Integer restaurantId = parsePositiveInt(request.getHeader(RESTAURANT_ID_HEADER));
+
+                UserPrincipal principal = new UserPrincipal(
+                        userId,
+                        "simulated@savory.test",
+                        Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+                );
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        principal,
+                        presentedToken,
+                        principal.getAuthorities()
+                );
+                SecurityContextHolder.getContext().setAuthentication(auth);
+                SimulatedRequestContext.set(new SimulatedCaller(userId, restaurantId));
             }
             filterChain.doFilter(request, response);
         } finally {
             SimulatedRequestContext.clear();
             SecurityContextHolder.clearContext();
+        }
+    }
+
+    private static Integer parsePositiveInt(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            int value = Integer.parseInt(raw.trim());
+            return value > 0 ? value : null;
+        } catch (NumberFormatException ex) {
+            return null;
         }
     }
 
