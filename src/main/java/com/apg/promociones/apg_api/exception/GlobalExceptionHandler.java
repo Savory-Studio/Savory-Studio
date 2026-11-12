@@ -1,6 +1,7 @@
 package com.apg.promociones.apg_api.exception;
 
 import com.apg.promociones.apg_api.dto.ErrorResponse;
+import com.apg.promociones.apg_api.exception.PromocionExceptions.PromocionDuplicadaException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -77,5 +78,11 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleMalformedJson(HttpMessageNotReadableException ex) {
         return new ErrorResponse(400, "El cuerpo de la petición es inválido o está vacío.");
+    }
+
+    @ExceptionHandler(PromocionDuplicadaException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handlePromocionDuplicada(PromocionDuplicadaException ex) {
+        return new ErrorResponse(409, ex.getMessage());
     }
 }

@@ -4,6 +4,7 @@ import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
 import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
+import com.apg.promociones.apg_api.exception.PromocionExceptions.PromocionDuplicadaException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
@@ -37,6 +38,13 @@ public class PromocionService {
 
         Restaurant restaurant = restaurantRepository.findById(request.getRestaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante no encontrado."));
+
+        // Validación de duplicados (mismo restaurante + mismo nombre activo)
+        if (discountRepository.existsActiveByRestaurantAndName(
+                restaurant.getId(), request.getName().trim(), DiscountStatus.Active.name())) {
+            throw new PromocionDuplicadaException(
+                    "Ya existe una promoción activa con ese nombre para este restaurante.");
+        }
 
         DiscountType type;
         try {

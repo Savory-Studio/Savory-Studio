@@ -3,6 +3,7 @@ package com.apg.promociones.apg_api.repository;
 import com.apg.promociones.apg_api.model.Discount;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -26,4 +27,19 @@ public interface DiscountRepository extends JpaRepository<Discount, Integer> {
             ORDER BY d.discount_id
             """, nativeQuery = true)
     List<Discount> findActivePromotions();
+
+    @Query(value = """
+        SELECT EXISTS (
+            SELECT 1
+            FROM discounts
+            WHERE discount_restaurant_id = :restaurantId
+              AND UPPER(discount_name) = UPPER(:name)
+              AND discount_status = CAST(:status AS discount_status_enum)
+        )
+        """, nativeQuery = true)
+    boolean existsActiveByRestaurantAndName(
+            @Param("restaurantId") Integer restaurantId,
+            @Param("name") String name,
+            @Param("status") String status
+    );
 }
