@@ -1,0 +1,858 @@
+{
+	"info": {
+		"name": "Savory Studio – Security & Auth Tests",
+		"description": "Colección de pruebas de seguridad para Savory Studio API.\nCubre: registro, login/JWT, control de acceso (401/403), autorización contextual, spoofing de headers, y ausencia de hash de contraseña.\n\n**Flujo recomendado:**\n1. Ejecutar «1. Registro válido» → guarda userId automáticamente\n2. Ejecutar «2. Login válido» → guarda token automáticamente\n3. Ejecutar las demás pruebas en orden\n\n**Variables de entorno necesarias:**\n- `baseUrl` = http://localhost:8080\n- `token`, `userId`, `userEmail` → se llenan automáticamente con los scripts",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{ "key": "baseUrl", "value": "http://localhost:8080" },
+		{ "key": "token", "value": "" },
+		{ "key": "userId", "value": "" },
+		{ "key": "userEmail", "value": "" },
+		{ "key": "testEmail", "value": "postman.test.{{$timestamp}}@example.com" }
+	],
+	"item": [
+		{
+			"name": "1 – Registro",
+			"item": [
+				{
+					"name": "1.1  Registro válido → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Generar email único para esta ejecución",
+									"const uniqueEmail = `postman.test.${Date.now()}@example.com`;",
+									"pm.collectionVariables.set('testEmail', uniqueEmail);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"",
+									"const body = pm.response.json();",
+									"",
+									"pm.test('Respuesta contiene id, firstName, lastName, email, joinDate', () => {",
+									"    pm.expect(body).to.have.property('id');",
+									"    pm.expect(body).to.have.property('firstName');",
+									"    pm.expect(body).to.have.property('lastName');",
+									"    pm.expect(body).to.have.property('email');",
+									"    pm.expect(body).to.have.property('joinDate');",
+									"});",
+									"",
+									"pm.test('NO contiene password ni passwordHash', () => {",
+									"    pm.expect(body).to.not.have.property('password');",
+									"    pm.expect(body).to.not.have.property('passwordHash');",
+									"    pm.expect(body).to.not.have.property('password_hash');",
+									"    const raw = pm.response.text();",
+									"    pm.expect(raw).to.not.include('$2a$');",
+									"    pm.expect(raw).to.not.include('$2b$');",
+									"});",
+									"",
+									"// Guardar para siguientes pruebas",
+									"pm.collectionVariables.set('userId', body.id);",
+									"pm.collectionVariables.set('userEmail', body.email);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Postman\",\n  \"secondName\": \"QA\",\n  \"lastName\": \"Tester\",\n  \"birthday\": \"1995-05-15\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.2  Campos faltantes (sin firstName) → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.test('Mensaje indica campo obligatorio', () => {",
+									"    const body = pm.response.json();",
+									"    const text = JSON.stringify(body).toLowerCase();",
+									"    pm.expect(text).to.include('firstname');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"lastName\": \"Tester\",\n  \"birthday\": \"1995-05-15\",\n  \"email\": \"missing.fields@example.com\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.3  Email inválido → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.test('Mensaje indica email inválido', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('email') || t.includes('correo'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Bad\",\n  \"lastName\": \"Email\",\n  \"birthday\": \"1995-05-15\",\n  \"email\": \"esto-no-es-email\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.4  Contraseña corta (<8 chars) → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.test('Mensaje indica contraseña corta', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('contraseña') || t.includes('password') || t.includes('8'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Short\",\n  \"lastName\": \"Pass\",\n  \"birthday\": \"1995-05-15\",\n  \"email\": \"short.pass@example.com\",\n  \"password\": \"abc\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.5  Sin birthday → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.test('Mensaje indica birthday obligatorio', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('birthday') || t.includes('obligatorio'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"No\",\n  \"lastName\": \"Birthday\",\n  \"email\": \"no.birthday@example.com\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.6  Email duplicado → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));",
+									"pm.test('Mensaje indica email ya registrado', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('ya') || t.includes('already') || t.includes('registr') || t.includes('exist'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Duplicado\",\n  \"lastName\": \"Tester\",\n  \"birthday\": \"1995-05-15\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2 – Login / JWT",
+			"item": [
+				{
+					"name": "2.1  Login válido → 200 + JWT",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"",
+									"const body = pm.response.json();",
+									"",
+									"pm.test('Contiene token JWT, tokenType, userId, email', () => {",
+									"    pm.expect(body).to.have.property('token');",
+									"    pm.expect(body.token).to.be.a('string').and.not.empty;",
+									"    pm.expect(body.tokenType).to.eql('Bearer');",
+									"    pm.expect(body).to.have.property('userId');",
+									"    pm.expect(body).to.have.property('email');",
+									"    pm.expect(body).to.have.property('expiresIn');",
+									"});",
+									"",
+									"pm.test('NO contiene password ni passwordHash', () => {",
+									"    pm.expect(body).to.not.have.property('password');",
+									"    pm.expect(body).to.not.have.property('passwordHash');",
+									"    const raw = pm.response.text();",
+									"    pm.expect(raw).to.not.include('$2a$');",
+									"    pm.expect(raw).to.not.include('$2b$');",
+									"});",
+									"",
+									"pm.test('Mensaje de éxito', () => {",
+									"    pm.expect(body.message).to.eql('Authentication successful.');",
+									"});",
+									"",
+									"// Guardar token para las pruebas siguientes",
+									"pm.collectionVariables.set('token', body.token);",
+									"pm.collectionVariables.set('userId', body.userId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "2.2  Login sin campos → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					}
+				},
+				{
+					"name": "2.3  Login contraseña incorrecta → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.test('Mensaje genérico (RN-17)', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    // No debe revelar si el email existe o la contraseña es incorrecta",
+									"    pm.expect(text).to.satisfy(t => t.includes('credenciales') || t.includes('invalid') || t.includes('unauthorized'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"ContraseñaIncorrecta999\"\n}"
+						}
+					}
+				},
+				{
+					"name": "2.4  Login email inexistente → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.test('Mismo mensaje genérico que contraseña incorrecta (RN-17)', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('credenciales') || t.includes('invalid') || t.includes('unauthorized'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"noexiste.jamas@example.com\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3 – Acceso protegido (Token)",
+			"item": [
+				{
+					"name": "3.1  Sin token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.test('Mensaje indica autenticación requerida', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('token') || t.includes('autenticación') || t.includes('auth') || t.includes('unauthorized'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				},
+				{
+					"name": "3.2  Token manipulado → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiJ9.MANIPULATED.invalid-signature"
+							}
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				},
+				{
+					"name": "3.3  Token expirado (JWT fabricado) → 401",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// JWT con exp en el pasado (2020-01-01), firmado con clave dummy",
+									"// Header: {\"alg\":\"HS256\"} Payload: {\"sub\":\"1\",\"exp\":1577836800}",
+									"// Este token fue firmado con una clave diferente, así que falla de todos modos.",
+									"// El punto es verificar que tokens expirados se rechazan."
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIiwiZXhwIjoxNTc3ODM2ODAwfQ.fake-expired-signature"
+							}
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				},
+				{
+					"name": "3.4  Token válido → 200 (GET /activas)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('Respuesta es un array', () => {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				},
+				{
+					"name": "3.5  Authorization sin 'Bearer' prefix → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "{{token}}"
+							}
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				}
+			]
+		},
+		{
+			"name": "4 – Autorización contextual (403)",
+			"description": "Estas pruebas requieren que `token` y `userId` estén seteados (ejecutar Login válido primero).",
+			"item": [
+				{
+					"name": "4.1  Cupones propios → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('Respuesta es un array', () => {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons/usuario/{{userId}}" }
+					}
+				},
+				{
+					"name": "4.2  Cupones de OTRO usuario → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.test('Mensaje indica acceso denegado', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('denegado') || t.includes('denied') || t.includes('forbidden') || t.includes('permiso'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/coupons/usuario/999999",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "coupons", "usuario", "999999"]
+						}
+					}
+				},
+				{
+					"name": "4.3  Alias /cupones/ – cupones ajenos → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/cupones/usuario/999999" }
+					}
+				},
+				{
+					"name": "4.4  Asociar promoción para SÍ MISMO → 201 ó 404/409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// 201 si la promoción existe y está activa,",
+									"// 404 si no existe la promoción,",
+									"// 409 si ya fue reclamada o está inactiva.",
+									"// Lo importante es que NO sea 403.",
+									"pm.test('NO es 403 (autorización OK)', () => {",
+									"    pm.expect(pm.response.code).to.not.eql(403);",
+									"});",
+									"pm.test('Status es 201, 404 o 409', () => {",
+									"    pm.expect([201, 404, 409]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": {{userId}},\n  \"promotionId\": 1\n}"
+						}
+					}
+				},
+				{
+					"name": "4.5  Asociar promoción para OTRO usuario → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.test('Mensaje indica no puede asociar a otro', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('denegado') || t.includes('denied') || t.includes('otro'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": 999999,\n  \"promotionId\": 1\n}"
+						}
+					}
+				},
+				{
+					"name": "4.6  Publicar promoción – restaurante NO propio → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.test('Mensaje indica sin permiso para restaurante', () => {",
+									"    const text = JSON.stringify(pm.response.json()).toLowerCase();",
+									"    pm.expect(text).to.satisfy(t => t.includes('permiso') || t.includes('denied') || t.includes('denegado') || t.includes('restaurante'));",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": 999999,\n  \"name\": \"Promo de prueba 403\",\n  \"applicableProducts\": \"Todos\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 10.00,\n  \"endTimestamp\": \"2027-12-31T23:59:00\",\n  \"maxUses\": 50\n}"
+						}
+					}
+				},
+				{
+					"name": "4.7  Canje – restaurante NO propio → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Si no hay cupón con id=1 → puede dar 404",
+									"// Si el usuario no es dueño del restaurante → 403",
+									"// Lo clave: si el cupón existe, la respuesta debe ser 403 (no 201)",
+									"pm.test('Status 403 o 404 (nunca 201)', () => {",
+									"    pm.expect(pm.response.code).to.not.eql(201);",
+									"    pm.expect([403, 404]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponId\": 1\n}"
+						}
+					}
+				},
+				{
+					"name": "4.8  Canje por hash – sin ser dueño → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 o 404 (nunca 201)', () => {",
+									"    pm.expect(pm.response.code).to.not.eql(201);",
+									"    pm.expect([403, 404]).to.include(pm.response.code);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"a3f1b2c4-d5e6-7890-abcd-ef1234567890\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5 – Spoofing de headers",
+			"description": "Verifica que X-User-Id inyectado por el cliente no sea aceptado como fuente de identidad.",
+			"item": [
+				{
+					"name": "5.1  X-User-Id sin Bearer token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.test('El header X-User-Id NO otorga acceso sin token', () => {",
+									"    pm.expect(pm.response.code).to.eql(401);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "X-User-Id", "value": "1" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones/activas" }
+					}
+				},
+				{
+					"name": "5.2  X-User-Id contradice JWT → JWT prevalece → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// El JWT identifica a {{userId}}, pero el path pide cupones del user 999999.",
+									"// Aunque X-User-Id diga 999999, la identidad real es del JWT → 403.",
+									"pm.test('Status 403 Forbidden (JWT prevalece sobre header)', () => {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "X-User-Id", "value": "999999" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons/usuario/999999" }
+					}
+				},
+				{
+					"name": "5.3  X-User-Id + token válido → acceso propio OK (header ignorado)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// A pesar de enviar X-User-Id: 999999, la identidad viene del JWT.",
+									"// Pidiendo los cupones del userId real → 200 (el header se ignora).",
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('Respuesta es array (acceso al recurso propio funciona)', () => {",
+									"    pm.expect(pm.response.json()).to.be.an('array');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "X-User-Id", "value": "999999" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons/usuario/{{userId}}" }
+					}
+				}
+			]
+		},
+		{
+			"name": "6 – Ausencia de hash de contraseña",
+			"description": "Verifica que ninguna respuesta exponga el hash BCrypt ni la contraseña en texto plano.",
+			"item": [
+				{
+					"name": "6.1  Registro → sin password en respuesta",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const email = `hash.check.${Date.now()}@example.com`;",
+									"pm.collectionVariables.set('hashCheckEmail', email);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"",
+									"const body = pm.response.json();",
+									"const raw = pm.response.text();",
+									"",
+									"pm.test('Sin campo password', () => pm.expect(body).to.not.have.property('password'));",
+									"pm.test('Sin campo passwordHash', () => pm.expect(body).to.not.have.property('passwordHash'));",
+									"pm.test('Sin campo password_hash', () => pm.expect(body).to.not.have.property('password_hash'));",
+									"pm.test('Sin hash BCrypt ($2a$ / $2b$) en body', () => {",
+									"    pm.expect(raw).to.not.include('$2a$');",
+									"    pm.expect(raw).to.not.include('$2b$');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Hash\",\n  \"lastName\": \"Check\",\n  \"birthday\": \"1990-01-01\",\n  \"email\": \"{{hashCheckEmail}}\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				},
+				{
+					"name": "6.2  Login → sin password en respuesta",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"",
+									"const body = pm.response.json();",
+									"const raw = pm.response.text();",
+									"",
+									"pm.test('Sin campo password', () => pm.expect(body).to.not.have.property('password'));",
+									"pm.test('Sin campo passwordHash', () => pm.expect(body).to.not.have.property('passwordHash'));",
+									"pm.test('Sin hash BCrypt en body', () => {",
+									"    pm.expect(raw).to.not.include('$2a$');",
+									"    pm.expect(raw).to.not.include('$2b$');",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{hashCheckEmail}}\",\n  \"password\": \"SecureP@ss123\"\n}"
+						}
+					}
+				}
+			]
+		}
+	]
+}
+
