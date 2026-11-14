@@ -1,6 +1,6 @@
 # REST Contract — Coupon Redemption Validation
 
-**Jira Subtask:** [BE] APG-35 · APG-38 · [INT] APG-71
+**Jira Subtask:** [BE] APG-35 · APG-38 · APG-65 · [INT] APG-71
 **Traceability:** RN-01 · RN-02 · RN-03 · RN-04 · RN-05 · CA-01 · CA-02 · CA-03
 
 ---
@@ -85,6 +85,47 @@ Protected — requires `Authorization: Bearer <token>` header containing a valid
 | CP-02     | Coupon already USED or discount expired | 409 Conflict | Aligned ✅ |
 | CP-03     | After CP-02 rejection, DB unchanged | No side effects | Aligned ✅ |
 | CP-04     | Invalid or nonexistent couponId / couponHash | 400 / 404 | Aligned ✅ |
+| CP-05     | N simultaneous redemptions of the same coupon | 1× 201, N-1× 409 (RN-01) | Automated (APG-65) |
+| CP-06     | Simultaneous redemptions of different coupons beyond `max_uses` | Exactly `max_uses` × 201, rest 409 (RN-05) | Automated (APG-65) |
+| CP-07     | Simultaneous redemptions by one user beyond `max_use_amount_per_user` | Exactly the limit × 201, rest 409 (RN-04) | Automated (APG-65) |
+| CP-08     | Rejected concurrent redemptions | Data unchanged, original `redemption_timestamp` preserved | Automated (APG-65) |
+
+### Concurrency Guarantees (APG-65)
+
+`@Transactional` alone does not stop two simultaneous requests from reading the same state (both would see
+`UNUSED` and a free slot, and both would succeed). `CanjeService.redeem` therefore takes PostgreSQL row locks
+(`SELECT ... FOR UPDATE`, JPA `PESSIMISTIC_WRITE`) **before** evaluating RN-01 to RN-05:
+
+| Order | Locked row | Repository method | What it protects |
+|-------|------------|-------------------|------------------|
+| 1 | `coupon` (the coupon being redeemed) | `CouponRepository.findByIdForUpdate` / `findByCouponHashForUpdate` | RN-01: concurrent redemptions of the **same coupon** are serialized; the loser re-reads the committed `USED` state and gets `409`. No lost update of `coupon_redemption_timestamp`. |
+| 2 | `discounts` (the coupon's promotion) | `DiscountRepository.findByIdForUpdate` | RN-04 / RN-05: redemptions of **different coupons of the same promotion** are serialized, so the `USED` counts are read after the previous redemption committed. |
+
+Properties:
+- **Single winner:** N simultaneous requests for one coupon produce exactly one `201` and N-1 `409`.
+- **Limits are never exceeded:** with `discount_max_uses = M` (or `discount_max_use_amount_per_user = M`) at most `M`
+  coupons end up `USED`; the remaining requests receive `409` (`"Esta promoción se ha agotado."` /
+  `"Has alcanzado el límite de usos de esta promoción."`).
+- **Rejected requests do not modify data:** the exception rolls the transaction back and releases the locks.
+- **No deadlocks:** locks are always acquired in the same order (coupon, then discount), and no other code path
+  holds a discount lock while waiting for a coupon lock.
+- **Scope:** only redemptions of the same promotion wait for each other; other promotions are not affected.
+  Claiming (`POST /api/coupons`) does not take these locks and is guarded by the partial unique index
+  `uq_unused_coupon_per_user_promotion`.
+- The usage counts are still derived (`COUNT` of `USED` coupons); no counter column is introduced.
+
+Automated verification:
+
+| Test | Scope | Scenario |
+|------|-------|----------|
+| `CanjeServiceTest` | Unit (Mockito) | Locked lookups are used (id and hash), lock order coupon → discount, RN-01 to RN-05 messages preserved, nothing is saved on rejection, contextual authorization preserved. |
+| `CanjeConcurrencyIntegrationTest` | PostgreSQL (Testcontainers), full HTTP stack with JWT | 8 simultaneous requests: same coupon by id (1×`201`, 7×`409`, persisted timestamp equals the winner's), same coupon by hash, 8 coupons of a promotion with `max_uses = 3` (3×`201`, 5×`409`), one user with 5 coupons and `max_use_amount_per_user = 2` (2×`201`, 3×`409`), and repeated attempts on an already `USED` coupon leave it untouched. |
+
+Run them locally (Docker must be running):
+
+```powershell
+.\mvnw.cmd --batch-mode --no-transfer-progress "-Dtest=CanjeServiceTest,CanjeConcurrencyIntegrationTest" test
+```
 
 ### Data Model Dependencies
 
