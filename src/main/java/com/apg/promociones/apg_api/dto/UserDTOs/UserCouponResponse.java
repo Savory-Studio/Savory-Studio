@@ -1,4 +1,4 @@
-package com.apg.promociones.apg_api.dto;
+package com.apg.promociones.apg_api.dto.UserDTOs;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;

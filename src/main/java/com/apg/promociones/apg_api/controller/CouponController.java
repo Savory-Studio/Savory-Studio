@@ -4,7 +4,7 @@ import com.apg.promociones.apg_api.config.OpenApiConfig;
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
-import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.dto.UserDTOs.UserCouponResponse;
 import com.apg.promociones.apg_api.security.SecurityUtils;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import io.swagger.v3.oas.annotations.Operation;
