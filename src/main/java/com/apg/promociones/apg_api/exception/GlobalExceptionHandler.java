@@ -1,13 +1,14 @@
 package com.apg.promociones.apg_api.exception;
 
 import com.apg.promociones.apg_api.dto.ErrorResponse;
-
 import com.apg.promociones.apg_api.exception.PromocionExceptions.PromocionDuplicadaException;
-
 import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.PessimisticLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
-
+import com.apg.promociones.apg_api.exception.UserExceptions.CampoNoEditableException;
+import com.apg.promociones.apg_api.exception.UserExceptions.CorreoYaRegistradoException;
+import com.apg.promociones.apg_api.exception.UserExceptions.PerfilActualizacionInvalidaException;
+import com.apg.promociones.apg_api.exception.UserExceptions.UsuarioNoEncontradoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -101,5 +102,33 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.CONFLICT)
     public ErrorResponse handlePromocionDuplicada(PromocionDuplicadaException ex) {
         return new ErrorResponse(409, ex.getMessage());
+    }
+
+    // intento de modificar campos prohibidos en el perfil
+    @ExceptionHandler(CampoNoEditableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handleCampoNoEditable(CampoNoEditableException ex) {
+        return new ErrorResponse(400, ex.getMessage());
+    }
+
+    // datos inválidos o vacíos al actualizar perfil
+    @ExceptionHandler(PerfilActualizacionInvalidaException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ErrorResponse handlePerfilActualizacionInvalida(PerfilActualizacionInvalidaException ex) {
+        return new ErrorResponse(400, ex.getMessage());
+    }
+
+    // correo electrónico ya registrado por otro usuario
+    @ExceptionHandler(CorreoYaRegistradoException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ErrorResponse handleCorreoYaRegistrado(CorreoYaRegistradoException ex) {
+        return new ErrorResponse(409, ex.getMessage());
+    }
+
+    // usuario autenticado no encontrado
+    @ExceptionHandler(UsuarioNoEncontradoException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handleUsuarioNoEncontrado(UsuarioNoEncontradoException ex) {
+        return new ErrorResponse(404, ex.getMessage());
     }
 }

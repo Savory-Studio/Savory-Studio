@@ -2,7 +2,7 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
-import com.apg.promociones.apg_api.dto.UserCouponResponse;
+import com.apg.promociones.apg_api.dto.UserDTOs.UserCouponResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
