@@ -23,8 +23,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -149,6 +151,89 @@ class RegistrationIntegrationTest {
     void publicRegistrationExceptionDoesNotExposeOtherRoutes() throws Exception {
         mvc.perform(post("/api/coupons").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void authenticatedUserCanChangePasswordThenLoginWithNewPasswordAndFailWithOldPassword() throws Exception {
+        String email = "change-password@example.test";
+        register(request(email, "Password123"))
+                .andExpect(status().isCreated());
+
+        MvcResult loginResult = mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"Password123"}
+                                """.formatted(email)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String loginBody = loginResult.getResponse().getContentAsString();
+        String jwtToken = loginBody.split("\"token\":\"")[1].split("\"")[0];
+
+        // 1. Unauthenticated request must fail with 401
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"Password123","newPassword":"NewPassword456!"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        // 2. Wrong current password must fail with 400 and preserve original hash
+        mvc.perform(patch("/api/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"WrongPassword!","newPassword":"NewPassword456!"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Current password is incorrect."));
+
+        String unchangedHash = jdbc.queryForObject(
+                "SELECT user_password_hash FROM users WHERE user_email = ?",
+                String.class, email);
+        assertTrue(encoder.matches("Password123", unchangedHash));
+
+        // 3. Valid change updates BCrypt hash and never exposes password/hash in response
+        mvc.perform(patch("/api/users/me/password")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"Password123","newPassword":"NewPassword456!"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").isNumber())
+                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.message").value("Password updated successfully."))
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.currentPassword").doesNotExist())
+                .andExpect(jsonPath("$.newPassword").doesNotExist());
+
+        String updatedHash = jdbc.queryForObject(
+                "SELECT user_password_hash FROM users WHERE user_email = ?",
+                String.class, email);
+        assertTrue(updatedHash.startsWith("$2a$"));
+        assertTrue(encoder.matches("NewPassword456!", updatedHash));
+        assertFalse(encoder.matches("Password123", updatedHash));
+
+        // 4. Login with old password must fail with 401
+        mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"Password123"}
+                                """.formatted(email)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid credentials."));
+
+        // 5. Login with new password must succeed with 200 and issue JWT
+        mvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"%s","password":"NewPassword456!"}
+                                """.formatted(email)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.email").value(email));
     }
 
     private ResultActions register(String body) throws Exception {
