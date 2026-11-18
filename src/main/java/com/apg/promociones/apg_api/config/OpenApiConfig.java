@@ -23,7 +23,7 @@ public class OpenApiConfig {
                                 + "customer coupon claiming, and QR/UUID coupon redemption.\n\n"
                                 + "**Authentication & Route Protection (JWT Bearer):**\n"
                                 + "- **Public routes:** `POST /api/auth/register` and `POST /api/auth/login` do not require a token.\n"
-                                + "- **Protected routes:** `/api/promociones/**`, `/api/coupons/**`, `/api/cupones/**`, and `/api/canjes/**` "
+                                + "- **Protected routes:** `/api/users/**`, `/api/promociones/**`, `/api/coupons/**`, `/api/cupones/**`, and `/api/canjes/**` "
                                 + "require `Authorization: Bearer <token>`.\n"
                                 + "- Authenticate via `POST /api/auth/login` to obtain a signed HS256 JWT token, then click **Authorize** and paste the token."))
                 .addSecurityItem(new SecurityRequirement()

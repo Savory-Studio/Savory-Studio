@@ -1,7 +1,8 @@
 # REST Contract — User Login, JWT Issuance & Route Protection
 
-**Jira Subtask:** [BE] APG-52 · [INT] APG-71  
-**Traceability:** AUTH-01 · PO-01 · RN-17 · RN-18
+**Jira Subtask:** [BE] APG-52 · [BE] APG-55 · [INT] APG-71
+
+**Traceability:** AUTH-01 · AUTH-02 · AUTH-03 · PO-01 · RN-17 · RN-18
 
 ---
 
@@ -74,6 +75,7 @@ All `/api/**` routes are protected by `SimulatedAuthFilter` + `JwtService`, with
 | `POST /api/auth/register` | Public | No `Authorization` header required |
 | `POST /api/auth/login` | Public | No `Authorization` header required |
 | `/swagger-ui/**`, `/v3/api-docs/**` | Public | OpenAPI / Swagger UI documentation |
+| `PATCH /api/users/me/password` | Protected | `Authorization: Bearer <JWT>` |
 | `/api/promociones/**` | Protected | `Authorization: Bearer <JWT>` |
 | `/api/coupons/**`, `/api/cupones/**` | Protected | `Authorization: Bearer <JWT>` |
 | `/api/canjes/**` | Protected | `Authorization: Bearer <JWT>` |
@@ -114,3 +116,87 @@ All `/api/**` routes are protected by `SimulatedAuthFilter` + `JwtService`, with
 
 This contract operates on:
 - `users` (`user_id`, `user_email`, `user_password_hash`, `user_first_name`, `user_last_name`)
+
+---
+
+## PATCH /api/users/me/password
+
+**Jira Subtask:** [BE] APG-55
+
+**Traceability:** AUTH-02 · AUTH-03
+
+### Description
+
+Protected endpoint that allows the currently authenticated user (identified exclusively from the validated Bearer token context) to change their password after verifying their current password against the stored BCrypt hash.
+
+### Request Headers
+
+- `Authorization: Bearer <JWT>` (required)
+- `Content-Type: application/json`
+
+*(In test environments using `TEST_AUTH_TOKEN`, `X-User-Id: <userId>` identifies the authenticated caller.)*
+
+### Request Body
+
+```json
+{
+  "currentPassword": "Password123!",
+  "newPassword": "NewPassword456!"
+}
+```
+
+Both fields are required. `oldPassword` is also accepted as a JSON alias for `currentPassword`.
+
+### Field Constraints
+
+| Field | Type | Required | Constraints |
+| :---- | :---- | :---- | :---- |
+| `currentPassword` | String | Yes | Non-blank; must match stored `user_password_hash` via `PasswordEncoder.matches` |
+| `newPassword` | String | Yes | Non-blank, minimum 8 characters, maximum 72 UTF-8 bytes (BCrypt limit), must differ from the current password |
+
+### Success Response
+
+**HTTP 200 OK**
+
+```json
+{
+  "userId": 12,
+  "email": "carlos.perez@example.com",
+  "message": "Password updated successfully."
+}
+```
+
+Side effects on success:
+- `users.user_password_hash` is updated exclusively with the new BCrypt hash (`$2a$...`).
+- Plain-text passwords and BCrypt hashes are never returned in HTTP responses or logged.
+- Subsequent calls to `POST /api/auth/login` succeed with `newPassword` and return `401 Unauthorized` with `currentPassword`.
+
+### Error Responses
+
+| Code | Scenario | Message |
+| :---- | :---- | :---- |
+| **400** | Missing/blank `currentPassword` or `newPassword` | `"Current password is required."` / `"New password is required."` |
+| **400** | `newPassword` shorter than 8 characters | `"La contraseña debe tener al menos 8 caracteres."` |
+| **400** | `newPassword` exceeds 72 UTF-8 bytes | `"Password exceeds the 72-byte BCrypt limit."` |
+| **400** | `currentPassword` does not match stored BCrypt hash | `"Current password is incorrect."` |
+| **400** | `newPassword` matches the existing password | `"New password must be different from the current password."` |
+| **400** | Malformed or unreadable JSON body | `"El cuerpo de la petición es inválido o está vacío."` |
+| **401** | Missing, invalid, or expired Bearer token | `"The Bearer token is missing. Send Authorization: Bearer <token>."` / `"The Bearer token is invalid or expired."` / `"Could not identify the authenticated user."` |
+| **404** | Authenticated user ID does not exist in `users` | `"User not found."` |
+
+### Security & No-Modification Guarantees
+
+- Rejected requests (wrong current password, invalid new password, identical password, or unauthorized calls) leave `users.user_password_hash` unchanged.
+- Neither plain-text passwords nor BCrypt hashes are persisted unencrypted or serialized in any response DTO.
+- User identity is derived solely from the authenticated security context (`SecurityUtils`), never from client-supplied path or body IDs.
+
+### QA Cross-Reference (Test Cases)
+
+| Test Case | Scenario | Expected Result | Status |
+| :---- | :---- | :---- | :---- |
+| **CP-15** | Authenticated user provides valid `currentPassword` and valid `newPassword` | HTTP 200 OK without passwords/hashes in response; `user_password_hash` updated to new BCrypt hash | Automated |
+| **CP-16** | Incorrect `currentPassword` | HTTP 400 Bad Request (`"Current password is incorrect."`); stored hash unchanged | Automated |
+| **CP-17** | Invalid `newPassword` (`< 8` chars, `> 72` UTF-8 bytes, blank, or identical to current) | HTTP 400 Bad Request; stored hash unchanged | Automated |
+| **CP-18** | Missing, tampered, or expired Bearer token | HTTP 401 Unauthorized | Automated |
+| **CP-19** | Valid token whose `userId` does not exist in `users` | HTTP 404 Not Found (`"User not found."`) | Automated |
+| **CP-20** | End-to-end login check after password change | `POST /api/auth/login` fails with old password (`401`) and succeeds with new password (`200`) | Automated |
