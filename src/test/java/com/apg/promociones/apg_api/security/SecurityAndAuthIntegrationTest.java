@@ -11,7 +11,6 @@ import com.apg.promociones.apg_api.dto.CanjeRequest;
 import com.apg.promociones.apg_api.dto.CanjeResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
 import com.apg.promociones.apg_api.dto.PromocionResponse;
-import com.apg.promociones.apg_api.dto.UserCouponResponse;
 import com.apg.promociones.apg_api.exception.GlobalExceptionHandler;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
