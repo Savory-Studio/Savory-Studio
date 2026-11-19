@@ -1,7 +1,7 @@
 # REST Contract — Coupon Claiming & Customer Coupon History
 
-**Jira Subtask:** [BE] APG-32 · APG-43 · [INT] APG-71
-**Traceability:** RF-02 · RN-10 · RN-11 · RN-12 · RN-13
+**Jira Subtask:** [BE] APG-32 · APG-43 · APG-63 · [INT] APG-71
+**Traceability:** APG-7 · RF-02 · APG-35 · AUTH-03 · RN-10 · RN-11 · RN-12 · RN-13
 
 ---
 
@@ -143,3 +143,62 @@ This contract operates on:
 - `coupon` (coupon_id, user_id, discount_id, coupon_status, coupon_hash, coupon_claim_timestamp, coupon_redemption_timestamp)
 - `discounts` (discount_id, discount_status, discount_start_timestamp, discount_end_timestamp)
 - `users` (user_id)
+
+---
+
+## GET /api/coupons/{couponId}/qr (Alias: `/api/cupones/{couponId}/qr`)
+
+**Jira Subtask:** [BE] APG-63
+**Traceability:** APG-7 · RF-02 · APG-35 · AUTH-03
+
+### Description
+
+Generates on the fly (in memory) a scannable `300x300` PNG QR code image for a coupon belonging to the authenticated customer. The QR payload contains **exclusively** the persisted `coupon_hash` (UUID v4) — no sequential IDs (`couponId`, `userId`, `discountId`) and no personal data are embedded, and no database columns or entity fields are added.
+
+### Request Headers
+
+- `Authorization: Bearer <JWT>` (required)
+
+*(In local test environments using `TEST_AUTH_TOKEN`, `X-User-Id: <userId>` identifies the caller.)*
+
+### Path Parameters
+
+| Parameter | Type | Required | Constraints |
+|-----------|------|----------|-------------|
+| `couponId` | Integer | Yes | Positive integer identifying the customer's coupon |
+
+### Success Response
+
+**HTTP 200 OK**
+
+- **Headers:**
+  - `Content-Type: image/png`
+  - `Cache-Control: no-store`
+- **Body:** Binary PNG image (`300x300` px) whose decoded QR text equals `coupon.coupon_hash` (e.g. `a3f1b2c4-d5e6-7890-abcd-ef1234567890`).
+
+### Error Responses (`GET /api/coupons/{couponId}/qr`)
+
+| Code | Scenario | Content-Type | Message |
+|------|----------|--------------|---------|
+| 400 | `couponId <= 0` | `application/json` | "The couponId must be a positive integer." |
+| 400 | Non-numeric `couponId` | `application/json` | "The value of couponId is invalid." |
+| 401 | Missing, invalid, or expired Bearer token / unidentified caller | `application/json` | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." / "Could not identify the authenticated user." |
+| 403 | Authenticated user does not own the requested coupon | `application/json` | "Acceso denegado: no tiene permiso para consultar el QR de este cupón." |
+| 404 | `couponId` does not exist | `application/json` | "Coupon not found." |
+
+### Security & Privacy Guarantees
+
+- Only the coupon owner (`coupon.user_id == authenticatedUserId`) can retrieve the QR image (`403 Forbidden` otherwise).
+- The encoded QR string contains solely `coupon_hash` — never `coupon_id`, `user_id`, email, or personal metadata.
+- No binary image or image URL is persisted in `coupon`; generation occurs ephemerally in memory via ZXing.
+
+### QA Cross-Reference (`APG-63`)
+
+| Test Case | Scenario | Expected | Status |
+|-----------|----------|----------|--------|
+| QR-01 | Valid JWT owner requests `GET /api/coupons/{id}/qr` | 200 OK (`image/png`, `Cache-Control: no-store`); ZXing decodes exact `coupon_hash` | Automated |
+| QR-02 | Valid JWT owner requests alias `GET /api/cupones/{id}/qr` | 200 OK (`image/png`); ZXing decodes exact `coupon_hash` | Automated |
+| QR-03 | Missing, tampered, or unidentified Bearer token | 401 Unauthorized (`application/json`) | Automated |
+| QR-04 | Authenticated user requests a coupon owned by another user | 403 Forbidden (`application/json`) | Automated |
+| QR-05 | Non-existent `couponId` | 404 Not Found (`application/json`) | Automated |
+| QR-06 | `couponId <= 0` or non-integer (`abc`) | 400 Bad Request (`application/json`) | Automated |

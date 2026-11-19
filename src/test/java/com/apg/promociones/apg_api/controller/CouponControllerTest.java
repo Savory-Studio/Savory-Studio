@@ -9,6 +9,7 @@ import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
 import com.apg.promociones.apg_api.security.SimulatedAuthFilter;
 import com.apg.promociones.apg_api.security.SimulatedAuthProperties;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
+import com.apg.promociones.apg_api.service.CouponQrService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,9 @@ class CouponControllerTest {
     @Mock
     private AssociatePromotionService associatePromotionService;
 
+    @Mock
+    private CouponQrService couponQrService;
+
     private final SimulatedAuthProperties authProperties = new SimulatedAuthProperties();
 
     private MockMvc mockMvc;
@@ -44,7 +48,7 @@ class CouponControllerTest {
     @BeforeEach
     void setUp() {
         authProperties.setToken("coupon-controller-test");
-        mockMvc = MockMvcBuilders.standaloneSetup(new CouponController(associatePromotionService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new CouponController(associatePromotionService, couponQrService))
                 .addFilters(new SimulatedAuthFilter(authProperties))
                 .defaultRequest(get("/").header(HttpHeaders.AUTHORIZATION, "Bearer coupon-controller-test"))
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -123,7 +127,7 @@ class CouponControllerTest {
 
     @Test
     void returns401WhenBearerTokenIsMissing() throws Exception {
-        MockMvc unauthenticatedMvc = MockMvcBuilders.standaloneSetup(new CouponController(associatePromotionService))
+        MockMvc unauthenticatedMvc = MockMvcBuilders.standaloneSetup(new CouponController(associatePromotionService, couponQrService))
                 .addFilters(new SimulatedAuthFilter(authProperties))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
