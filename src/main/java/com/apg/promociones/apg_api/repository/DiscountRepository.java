@@ -1,5 +1,6 @@
 package com.apg.promociones.apg_api.repository;
 
+import com.apg.promociones.apg_api.dto.PromotionMetricsProjection;
 import com.apg.promociones.apg_api.model.Discount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -55,4 +56,36 @@ public interface DiscountRepository extends JpaRepository<Discount, Integer> {
             @Param("name") String name,
             @Param("status") String status
     );
+
+    @Query(value = """
+            SELECT d.discount_id        AS promotionId,
+                   d.discount_name       AS promotionName,
+                   d.discount_restaurant_id AS restaurantId,
+                   d.discount_view_amount AS viewCount,
+                   COUNT(c.coupon_id)    AS totalClaimed,
+                   COUNT(c.coupon_id) FILTER (WHERE c.coupon_status = CAST('USED' AS coupon_status_enum))
+                                         AS totalRedeemed
+            FROM discounts d
+            LEFT JOIN coupon c ON c.discount_id = d.discount_id
+            GROUP BY d.discount_id, d.discount_name, d.discount_restaurant_id, d.discount_view_amount
+            ORDER BY d.discount_id
+            """, nativeQuery = true)
+    List<PromotionMetricsProjection> findPromotionMetrics();
+
+    @Query(value = """
+            SELECT d.discount_id        AS promotionId,
+                   d.discount_name       AS promotionName,
+                   d.discount_restaurant_id AS restaurantId,
+                   d.discount_view_amount AS viewCount,
+                   COUNT(c.coupon_id)    AS totalClaimed,
+                   COUNT(c.coupon_id) FILTER (WHERE c.coupon_status = CAST('USED' AS coupon_status_enum))
+                                         AS totalRedeemed
+            FROM discounts d
+            LEFT JOIN coupon c ON c.discount_id = d.discount_id
+            WHERE d.discount_restaurant_id = :restaurantId
+            GROUP BY d.discount_id, d.discount_name, d.discount_restaurant_id, d.discount_view_amount
+            ORDER BY d.discount_id
+            """, nativeQuery = true)
+    List<PromotionMetricsProjection> findPromotionMetricsByRestaurantId(
+            @Param("restaurantId") Integer restaurantId);
 }

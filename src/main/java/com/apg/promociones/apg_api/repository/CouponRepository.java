@@ -54,4 +54,6 @@ public interface CouponRepository extends JpaRepository<Coupon, Integer> {
             "AND c.discount_id = :discountId AND c.coupon_status = " +
             "CAST('UNUSED' AS coupon_status_enum))", nativeQuery = true)
     boolean existsUnusedByUserAndDiscount(Integer userId, Integer discountId);
+
+    long countByDiscount_Id(Integer discountId);
 }
