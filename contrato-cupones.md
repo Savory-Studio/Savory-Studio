@@ -52,11 +52,20 @@ Retrieves all coupons (`UNUSED` and `USED`) claimed by the specified customer, r
 
 ### Description
 
-Allows a customer to claim an active promotion, creating an UNUSED coupon
-linked to their profile. A unique UUID hash is generated for each coupon
-to enable QR-based redemption at the restaurant.
+Allows an authenticated customer to claim an active promotion, creating an UNUSED coupon
+linked to their profile. The claiming customer is identified directly from the authenticated JWT
+session (`SecurityContext`), preventing identity spoofing. A unique UUID hash (`coupon_hash`) is generated
+for each coupon via `CouponHashGenerator` to enable QR-based redemption at the restaurant and meet Supabase constraints.
 
 ### Request Body
+
+```json
+{
+  "promotionId": 9
+}
+```
+
+Optional payload with customer confirmation:
 
 ```json
 {
@@ -65,8 +74,8 @@ to enable QR-based redemption at the restaurant.
 }
 ```
 
-Both fields are required. The server resolves all other data
-(restaurant, discount details) through database relationships.
+- `promotionId`: required positive integer.
+- `userId`: optional integer. If provided, it must match the authenticated JWT user ID; any mismatch is rejected with HTTP 403 Forbidden.
 
 ### Success Response
 
@@ -88,16 +97,16 @@ Side effects on success:
 - A new row is inserted in the `coupon` table
 - `coupon_status` is set to `UNUSED`
 - `coupon_claim_timestamp` is set to the current server time
-- `coupon_hash` is auto-generated (UUID v4, unique per coupon)
+- `coupon_hash` is auto-generated (UUID v4, unique per coupon via `CouponHashGenerator`, required `NOT NULL` by Supabase)
 
 ### Error Responses (`POST /api/coupons`)
 
 | Code | Scenario | Message | Rule |
 |------|----------|---------|------|
-| 400  | `userId` missing or null | "The userId field is required." | — |
 | 400  | `promotionId` missing or null | "The promotionId field is required." | — |
 | 400  | Malformed JSON or empty body | "El cuerpo de la petición es inválido o está vacío." | — |
 | 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
+| 403  | `userId` in body does not match authenticated user | "Acceso denegado: no puede asociar promociones a otro usuario" | Anti-spoofing |
 | 404  | `userId` does not exist | "User not found." | — |
 | 404  | `promotionId` does not exist | "Promotion not found." | — |
 | 409  | `discount_status` is not `Active` | "This promotion is no longer available." | RN-10 |
@@ -112,7 +121,7 @@ No coupon is created, no hash is generated, and no timestamp is written.
 
 ### Authorization
 
-Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
+Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments). The claiming user ID is derived directly from the authenticated principal in `SecurityContext`.
 
 ### Business Rules
 
@@ -127,15 +136,18 @@ Protected — requires `Authorization: Bearer <token>` header containing a valid
 
 | Test Case | Scenario | Expected | Status |
 |-----------|----------|----------|--------|
-| GC-01 | Valid userId + promotionId, active promotion | 201 Created with couponHash | Automated |
-| GC-02 | Non-existent userId | 404 Not Found | Automated |
+| GC-01 | Valid JWT + promotionId, active promotion | 201 Created with couponHash and UNUSED status | Automated |
+| GC-01b | Valid JWT + matching userId + promotionId | 201 Created with couponHash | Automated |
+| GC-01c | Valid JWT + mismatched userId in body | 403 Forbidden (spoofing prevented) | Automated |
+| GC-02 | Non-existent userId in auth context | 404 Not Found | Automated |
 | GC-03 | Non-existent promotionId | 404 Not Found | Automated |
 | GC-04 | Promotion with status Finished or Suspended | 409 Conflict | Automated |
 | GC-05 | Promotion not started yet | 409 Conflict | Automated |
 | GC-06 | Promotion already expired | 409 Conflict | Automated |
 | GC-07 | Duplicate claim (UNUSED coupon already exists) | 409 Conflict | Automated |
-| GC-08 | Missing or empty request body | 400 Bad Request | Automated |
+| GC-08 | Missing promotionId or empty request body | 400 Bad Request | Automated |
 | GC-09 | couponHash is unique UUID v4 format | Validate format | Automated |
+| GC-10 | Unauthenticated request without Bearer token | 401 Unauthorized | Automated |
 
 ### Data Model Dependencies
 
