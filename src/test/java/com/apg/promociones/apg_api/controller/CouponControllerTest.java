@@ -50,7 +50,9 @@ class CouponControllerTest {
         authProperties.setToken("coupon-controller-test");
         mockMvc = MockMvcBuilders.standaloneSetup(new CouponController(associatePromotionService, couponQrService))
                 .addFilters(new SimulatedAuthFilter(authProperties))
-                .defaultRequest(get("/").header(HttpHeaders.AUTHORIZATION, "Bearer coupon-controller-test"))
+                .defaultRequest(get("/")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer coupon-controller-test")
+                        .header("X-User-Id", "10"))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
@@ -88,10 +90,20 @@ class CouponControllerTest {
                 .thenThrow(new ResourceNotFoundException("User not found."));
 
         mockMvc.perform(get("/api/cupones/usuario/999")
+                        .header("X-User-Id", "999")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.message").value("User not found."));
+    }
+
+    @Test
+    void returns403WhenUserAccessesOtherUserCoupons() throws Exception {
+        mockMvc.perform(get("/api/cupones/usuario/999")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.message").value("Acceso denegado: el usuario autenticado no coincide con el ID solicitado"));
     }
 
     @Test
@@ -110,9 +122,10 @@ class CouponControllerTest {
                         .couponId(99)
                         .userId(10)
                         .promotionId(20)
+                        .couponHash("a3f1b2c4-d5e6-7890-abcd-ef1234567890")
                         .status("UNUSED")
                         .claimTimestamp(LocalDateTime.of(2026, 10, 26, 16, 0))
-                        .message("Promotion associated with the customer profile.")
+                        .message("Promoción guardada en el perfil del cliente.")
                         .build());
 
         mockMvc.perform(post("/api/coupons")
@@ -122,7 +135,43 @@ class CouponControllerTest {
                 .andExpect(jsonPath("$.couponId").value(99))
                 .andExpect(jsonPath("$.userId").value(10))
                 .andExpect(jsonPath("$.promotionId").value(20))
+                .andExpect(jsonPath("$.couponHash").value("a3f1b2c4-d5e6-7890-abcd-ef1234567890"))
                 .andExpect(jsonPath("$.status").value("UNUSED"));
+    }
+
+    @Test
+    void returns201WhenUserIdIsOmittedInBodyAndDerivedFromAuthentication() throws Exception {
+        when(associatePromotionService.associate(eq(10), any(AssociatePromotionRequest.class)))
+                .thenReturn(AssociatePromotionResponse.builder()
+                        .couponId(99)
+                        .userId(10)
+                        .promotionId(20)
+                        .couponHash("a3f1b2c4-d5e6-7890-abcd-ef1234567890")
+                        .status("UNUSED")
+                        .claimTimestamp(LocalDateTime.of(2026, 10, 26, 16, 0))
+                        .message("Promoción guardada en el perfil del cliente.")
+                        .build());
+
+        mockMvc.perform(post("/api/coupons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"promotionId\":20}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.couponId").value(99))
+                .andExpect(jsonPath("$.userId").value(10))
+                .andExpect(jsonPath("$.promotionId").value(20))
+                .andExpect(jsonPath("$.couponHash").value("a3f1b2c4-d5e6-7890-abcd-ef1234567890"))
+                .andExpect(jsonPath("$.status").value("UNUSED"));
+    }
+
+    @Test
+    void returns403WhenAttemptingToAssociatePromotionForDifferentUser() throws Exception {
+        mockMvc.perform(post("/api/coupons")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":999,\"promotionId\":20}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.message").value("Acceso denegado: no puede asociar promociones a otro usuario"));
+        verifyNoInteractions(associatePromotionService);
     }
 
     @Test
@@ -149,12 +198,12 @@ class CouponControllerTest {
     }
 
     @Test
-    void returns400WhenUserIdIsMissingInBody() throws Exception {
+    void returns400WhenPromotionIdIsMissingInBody() throws Exception {
         mockMvc.perform(post("/api/coupons")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"promotionId\":20}"))
+                        .content("{\"userId\":10}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("The userId field is required."));
+                .andExpect(jsonPath("$.message").value("The promotionId field is required."));
     }
 
     @Test
@@ -187,6 +236,7 @@ class CouponControllerTest {
                 .thenThrow(new ResourceNotFoundException("User not found."));
 
         mockMvc.perform(post("/api/coupons")
+                        .header("X-User-Id", "999")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":999,\"promotionId\":20}"))
                 .andExpect(status().isNotFound())

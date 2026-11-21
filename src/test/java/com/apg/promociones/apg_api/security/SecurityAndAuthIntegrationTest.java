@@ -478,6 +478,37 @@ class SecurityAndAuthIntegrationTest {
         }
 
         @Test
+        @DisplayName("User associating promotion without userId in body derives identity from JWT and returns 201 Created")
+        void associateWithoutUserIdInBody_Returns201_DerivedFromJwt() throws Exception {
+            String jwtUser10 = jwtService.generateToken(testUser10);
+
+            AssociatePromotionRequest request = new AssociatePromotionRequest(5);
+            AssociatePromotionResponse response = AssociatePromotionResponse.builder()
+                    .couponId(502)
+                    .userId(10)
+                    .promotionId(5)
+                    .couponHash("jwt-derived-hash-uuid")
+                    .status("UNUSED")
+                    .claimTimestamp(LocalDateTime.now())
+                    .message("Promoción guardada en el perfil del cliente.")
+                    .build();
+
+            when(associatePromotionService.associate(10, request)).thenReturn(response);
+
+            mockMvc.perform(post("/api/coupons")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUser10)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"promotionId":5}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.couponId").value(502))
+                    .andExpect(jsonPath("$.userId").value(10))
+                    .andExpect(jsonPath("$.couponHash").value("jwt-derived-hash-uuid"))
+                    .andExpect(jsonPath("$.status").value("UNUSED"));
+        }
+
+        @Test
         @DisplayName("Publishing promotion for owned restaurant returns 201 Created")
         void publishPromotion_OwnedRestaurant_Returns201() throws Exception {
             String jwtUser10 = jwtService.generateToken(testUser10);

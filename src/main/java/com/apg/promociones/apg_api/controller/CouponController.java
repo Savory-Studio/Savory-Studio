@@ -101,11 +101,12 @@ public class CouponController {
     public List<UserCouponResponse> getUserCoupons(
             @Parameter(description = "ID of the customer whose coupons are requested", example = "10", required = true)
             @PathVariable("userId") Integer userId) {
-        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
-            if (!authUserId.equals(userId)) {
-                throw new AccessDeniedException("Acceso denegado: el usuario autenticado no coincide con el ID solicitado");
-            }
-        });
+        Integer authUserId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException(
+                        "The Bearer token is missing. Send Authorization: Bearer <token>."));
+        if (!authUserId.equals(userId)) {
+            throw new AccessDeniedException("Acceso denegado: el usuario autenticado no coincide con el ID solicitado");
+        }
         return associatePromotionService.getUserCoupons(userId);
     }
 
@@ -113,7 +114,7 @@ public class CouponController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Associate an active promotion with a customer",
-            description = "Creates an UNUSED coupon linking the customer and the promotion after verifying that the promotion exists and is currently valid."
+            description = "Creates an UNUSED coupon linking the customer and the promotion after verifying that the promotion exists and is currently valid. The customer identity is derived from the authenticated JWT session."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Promotion associated with the customer profile",
@@ -130,12 +131,14 @@ public class CouponController {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public AssociatePromotionResponse associatePromotion(@Valid @RequestBody AssociatePromotionRequest request) {
-        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
-            if (request.getUserId() != null && !authUserId.equals(request.getUserId())) {
-                throw new AccessDeniedException("Acceso denegado: no puede asociar promociones a otro usuario");
-            }
-        });
-        Integer effectiveUserId = SecurityUtils.getCurrentUserId().orElse(request.getUserId());
-        return associatePromotionService.associate(effectiveUserId, request);
+        Integer authUserId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException(
+                        "The Bearer token is missing. Send Authorization: Bearer <token>."));
+
+        if (request.getUserId() != null && !authUserId.equals(request.getUserId())) {
+            throw new AccessDeniedException("Acceso denegado: no puede asociar promociones a otro usuario");
+        }
+
+        return associatePromotionService.associate(authUserId, request);
     }
 }

@@ -12,8 +12,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "Request payload to associate an active promotion with a customer profile")
 public class AssociatePromotionRequest {
 
-    @NotNull(message = "The userId field is required.")
-    @Schema(description = "ID of the customer claiming the promotion", example = "10", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "Optional ID of the customer claiming the promotion. If provided, it must match the authenticated user.", example = "10")
     private Integer userId;
 
     @NotNull(message = "The promotionId field is required.")
