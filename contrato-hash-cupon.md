@@ -77,6 +77,7 @@ Ahora incluye `couponHash` para que el frontend pueda confirmar qué cupón se c
 - **RN-HASH-01:** El hash se genera una sola vez al crear el cupón y no cambia.
 - **RN-HASH-02:** El hash es UUID v4 (36 caracteres, formato `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`).
 - **RN-HASH-03:** La búsqueda por hash es case-sensitive.
+- **Exposición QR (`APG-63`):** El endpoint autenticado `GET /api/coupons/{couponId}/qr` (alias `/api/cupones/{couponId}/qr`) genera al vuelo una imagen PNG escaneable cuyo contenido es exclusivamente este `coupon_hash` ya persistido, sin alterar `Coupon`, `CouponHashGenerator` ni la base de datos (ver [contrato-cupones.md](contrato-cupones.md)).
 
 ---
 

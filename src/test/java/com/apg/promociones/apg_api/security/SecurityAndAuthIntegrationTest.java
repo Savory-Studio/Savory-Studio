@@ -26,8 +26,10 @@ import com.apg.promociones.apg_api.repository.UserRepository;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.CanjeService;
+import com.apg.promociones.apg_api.service.CouponQrService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
 import com.apg.promociones.apg_api.service.PromocionService;
+import com.apg.promociones.apg_api.util.QrCodeGenerator;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.BeforeEach;
@@ -116,7 +118,8 @@ class SecurityAndAuthIntegrationTest {
         authFilter = new SimulatedAuthFilter(properties, jwtService);
 
         AuthController authController = new AuthController(authService);
-        CouponController couponController = new CouponController(associatePromotionService);
+        CouponQrService couponQrService = new CouponQrService(couponRepository, new QrCodeGenerator());
+        CouponController couponController = new CouponController(associatePromotionService, couponQrService);
         PromocionController promocionController = new PromocionController(promocionService);
         CanjeController canjeController = new CanjeController(canjeService);
 

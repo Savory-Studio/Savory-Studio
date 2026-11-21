@@ -5,8 +5,10 @@ import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.dto.UserDTOs.UserCouponResponse;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.security.SecurityUtils;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
+import com.apg.promociones.apg_api.service.CouponQrService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -18,7 +20,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,6 +43,42 @@ import java.util.List;
 public class CouponController {
 
     private final AssociatePromotionService associatePromotionService;
+    private final CouponQrService couponQrService;
+
+    @GetMapping("/{couponId}/qr")
+    @Operation(
+            summary = "Get coupon QR code image (PNG)",
+            description = "Generates on the fly a scannable PNG QR image encoding exclusively the persisted coupon_hash (UUID v4) "
+                    + "without sequential IDs or personal data. Only the customer who owns the coupon can retrieve it."
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Scannable PNG QR image encoding exclusively coupon_hash",
+                    content = @Content(mediaType = MediaType.IMAGE_PNG_VALUE,
+                            schema = @Schema(type = "string", format = "binary"))),
+            @ApiResponse(responseCode = "400", description = "Invalid couponId parameter",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Authenticated user does not own the requested coupon",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Coupon not found",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<byte[]> getCouponQr(
+            @Parameter(description = "ID of the coupon whose QR code is requested", example = "15", required = true)
+            @PathVariable("couponId") Integer couponId) {
+        Integer authenticatedUserId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException("Could not identify the authenticated user."));
+        byte[] qrImage = couponQrService.generateCouponQrPng(couponId, authenticatedUserId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .cacheControl(CacheControl.noStore())
+                .body(qrImage);
+    }
 
     @GetMapping("/usuario/{userId}")
     @ResponseStatus(HttpStatus.OK)
