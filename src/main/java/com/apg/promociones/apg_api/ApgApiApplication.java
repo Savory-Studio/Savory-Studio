@@ -8,6 +8,7 @@ public class ApgApiApplication {
 
 	public static void main(String[] args) {
 		SpringApplication.run(ApgApiApplication.class, args);
+		System.out.println("Started successfully");
 	}
 
 }

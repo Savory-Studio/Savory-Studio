@@ -3,9 +3,13 @@ package com.apg.promociones.apg_api.controller;
 import com.apg.promociones.apg_api.dto.ErrorResponse;
 import com.apg.promociones.apg_api.dto.LoginDTOs.LoginRequest;
 import com.apg.promociones.apg_api.dto.LoginDTOs.LoginResponse;
+import com.apg.promociones.apg_api.dto.PasswordRecoveryDTOs.ForgotPasswordRequest;
+import com.apg.promociones.apg_api.dto.PasswordRecoveryDTOs.PasswordRecoveryResponse;
+import com.apg.promociones.apg_api.dto.PasswordRecoveryDTOs.ResetPasswordRequest;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterRequest;
 import com.apg.promociones.apg_api.dto.RegisterDTOs.RegisterResponse;
 import com.apg.promociones.apg_api.service.AuthService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -24,9 +28,11 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordRecoveryService passwordRecoveryService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, PasswordRecoveryService passwordRecoveryService) {
         this.authService = authService;
+        this.passwordRecoveryService = passwordRecoveryService;
     }
 
     @PostMapping("/register")
@@ -74,5 +80,39 @@ public class AuthController {
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/forgot-password")
+    @SecurityRequirements()
+    @Operation(
+            summary = "Request password recovery email",
+            description = "Generates a single-use, time-limited reset token and sends it via email. Always returns 200 OK with a generic message to avoid email enumeration."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Generic confirmation response",
+                    content = @Content(schema = @Schema(implementation = PasswordRecoveryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid email format or missing field",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<PasswordRecoveryResponse> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.ok(passwordRecoveryService.requestPasswordReset(request));
+    }
+
+    @PostMapping("/reset-password")
+    @SecurityRequirements()
+    @Operation(
+            summary = "Reset password using recovery token",
+            description = "Validates the single-use recovery token, updates the user's password with BCrypt, and invalidates the token."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Password updated successfully",
+                    content = @Content(schema = @Schema(implementation = PasswordRecoveryResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Invalid, expired, or already-used token, or invalid new password",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<PasswordRecoveryResponse> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        return ResponseEntity.ok(passwordRecoveryService.resetPassword(request));
     }
 }
