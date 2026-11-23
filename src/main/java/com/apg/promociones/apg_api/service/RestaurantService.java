@@ -2,10 +2,12 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.CreateRestaurantRequest;
 import com.apg.promociones.apg_api.dto.CreateRestaurantResponse;
+import com.apg.promociones.apg_api.dto.RestaurantDTOs.RestaurantDetailResponse;
 import com.apg.promociones.apg_api.dto.UpdateRestaurantRequest;
 import com.apg.promociones.apg_api.dto.UpdateRestaurantResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.RestaurantStaffExceptions.PermisoDenegadoException;
 import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
@@ -16,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +57,37 @@ public class RestaurantService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public List<RestaurantDetailResponse> getMyRestaurants(Integer ownerId) {
+        return restaurantRepository.findByOwnerIdOrderByCreationDateDesc(ownerId)
+                .stream()
+                .map(this::toDetailResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public RestaurantDetailResponse getById(Integer restaurantId, Integer currentUserId) {
+        Restaurant restaurant = restaurantRepository.findById(restaurantId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No se encontró el restaurante con ID: " + restaurantId));
+
+        if (!restaurant.getOwner().getId().equals(currentUserId)) {
+            throw new PermisoDenegadoException("No tienes permiso para ver el detalle de este restaurante.");
+        }
+
+        return toDetailResponse(restaurant);
+    }
+
+    private RestaurantDetailResponse toDetailResponse(Restaurant restaurant) {
+        return RestaurantDetailResponse.builder()
+                .restaurantId(restaurant.getId())
+                .name(restaurant.getName())
+                .ownerId(restaurant.getOwner().getId())
+                .description(restaurant.getDescription())
+                .fullAddress(restaurant.getFullAddress())
+                .creationDate(restaurant.getCreationDate())
+                .build();
+    }
     /**
      * Partially updates editable fields (name, description, fullAddress) of an existing restaurant
      * after verifying that the authenticated caller owns it via {@code restaurant_owner_id}.
