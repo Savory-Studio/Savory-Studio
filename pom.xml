@@ -126,6 +126,11 @@
 			<artifactId>javase</artifactId>
 			<version>3.5.3</version>
 		</dependency>
+		<!-- Email / SMTP -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

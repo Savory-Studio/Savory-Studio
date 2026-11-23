@@ -11,6 +11,17 @@ spring:
     username: ${DB_USER:postgres.fklmbyqcsdrroppajnyo}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
   jpa:
     hibernate:
@@ -28,6 +39,10 @@ app:
   simulated-auth:
     enabled: true
     token: ${TEST_AUTH_TOKEN:test-token}
+  password-reset:
+    token-expiration-minutes: ${PASSWORD_RESET_EXPIRATION_MINUTES:15}
+    frontend-url: ${PASSWORD_RESET_FRONTEND_URL:http://localhost:3000/reset-password}
+    from-email: ${MAIL_FROM:no-reply@savorystudio.com}
 
 jwt:
   secret: ${JWT_SECRET:MiClaveSuperSecretaYLoSuficientementeLargaParaHS25612345}
