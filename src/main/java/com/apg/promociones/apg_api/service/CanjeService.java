@@ -80,14 +80,22 @@ public class CanjeService {
         }
 
         // --- RN-02: discount inactive ---
-        if (discount.getStatus() == DiscountStatus.Finished
-                || discount.getStatus() == DiscountStatus.Suspended) {
+        if (discount.getStatus() == DiscountStatus.Suspended) {
+            throw new BusinessRuleException("Esta promoción ya no está disponible.");
+        }
+        if (discount.getStatus() == DiscountStatus.Finished) {
+            if (discount.getMaxUses() != null) {
+                long usedCount = couponRepository.countByDiscountAndStatus(discount, CouponStatus.USED);
+                if (discount.isExhaustedWithUsedCount(usedCount)) {
+                    throw new BusinessRuleException("Esta promoción se ha agotado.");
+                }
+            }
             throw new BusinessRuleException("Esta promoción ya no está disponible.");
         }
 
         // --- RN-03: discount expired ---
-        if (discount.getEndTimestamp() != null
-                && discount.getEndTimestamp().isBefore(LocalDateTime.now())) {
+        LocalDateTime now = LocalDateTime.now();
+        if (discount.isExpiredAt(now)) {
             throw new BusinessRuleException("Esta promoción ha vencido.");
         }
 
@@ -102,19 +110,24 @@ public class CanjeService {
         }
 
         // --- RN-05: global limit ---
+        long totalRedemptionsBefore = 0L;
         if (discount.getMaxUses() != null) {
-            long totalRedemptions = couponRepository.countByDiscountAndStatus(
+            totalRedemptionsBefore = couponRepository.countByDiscountAndStatus(
                     discount, CouponStatus.USED);
-            if (totalRedemptions >= discount.getMaxUses()) {
+            if (discount.isExhaustedWithUsedCount(totalRedemptionsBefore)) {
                 throw new BusinessRuleException("Esta promoción se ha agotado.");
             }
         }
 
         // --- All rules pass — execute redemption (flushed while both row locks are still held) ---
-        LocalDateTime now = LocalDateTime.now();
         coupon.setStatus(CouponStatus.USED);
         coupon.setRedemptionTimestamp(now);
         couponRepository.saveAndFlush(coupon);
+
+        // --- APG-66: close promotion immediately when the final available use is redeemed ---
+        if (discount.isExhaustedWithUsedCount(totalRedemptionsBefore + 1) && discount.finishIfActive()) {
+            discountRepository.saveAndFlush(discount);
+        }
 
         return CanjeResponse.builder()
                 .couponId(coupon.getId())

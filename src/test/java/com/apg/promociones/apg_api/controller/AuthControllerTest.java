@@ -8,6 +8,7 @@ import com.apg.promociones.apg_api.security.SimulatedAuthFilter;
 import com.apg.promociones.apg_api.security.SimulatedAuthProperties;
 import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import com.apg.promociones.apg_api.service.PromocionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,9 @@ class AuthControllerTest {
     @Mock
     private PromocionService promocionService;
 
+    @Mock
+    private PasswordRecoveryService passwordRecoveryService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private JwtService jwtService;
     private MockMvc mockMvc;
@@ -58,7 +62,7 @@ class AuthControllerTest {
         authProperties.setToken("fallback-test-token");
 
         mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(authService),
+                        new AuthController(authService, passwordRecoveryService),
                         new PromocionController(promocionService))
                 .addFilters(new SimulatedAuthFilter(authProperties, jwtService))
                 .setControllerAdvice(new GlobalExceptionHandler())

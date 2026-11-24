@@ -28,6 +28,7 @@ import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.CanjeService;
 import com.apg.promociones.apg_api.service.CouponQrService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import com.apg.promociones.apg_api.service.PromocionService;
 import com.apg.promociones.apg_api.util.QrCodeGenerator;
 import io.jsonwebtoken.Jwts;
@@ -90,6 +91,9 @@ class SecurityAndAuthIntegrationTest {
     @Mock
     private AssociatePromotionService associatePromotionService;
 
+    @Mock
+    private PasswordRecoveryService passwordRecoveryService;
+
     private PasswordEncoder passwordEncoder;
     private JwtService jwtService;
     private AuthService authService;
@@ -117,7 +121,7 @@ class SecurityAndAuthIntegrationTest {
 
         authFilter = new SimulatedAuthFilter(properties, jwtService);
 
-        AuthController authController = new AuthController(authService);
+        AuthController authController = new AuthController(authService, passwordRecoveryService);
         CouponQrService couponQrService = new CouponQrService(couponRepository, new QrCodeGenerator());
         CouponController couponController = new CouponController(associatePromotionService, couponQrService);
         PromocionController promocionController = new PromocionController(promocionService);

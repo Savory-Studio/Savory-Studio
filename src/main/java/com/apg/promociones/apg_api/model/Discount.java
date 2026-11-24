@@ -71,4 +71,30 @@ public class Discount {
 
     @Column(name = "discount_additional_use_conditions", columnDefinition = "TEXT")
     private String additionalUseConditions;
+
+    /**
+     * Returns true when this promotion has an expiration timestamp strictly before {@code referenceTime}.
+     */
+    public boolean isExpiredAt(LocalDateTime referenceTime) {
+        return endTimestamp != null && referenceTime != null && endTimestamp.isBefore(referenceTime);
+    }
+
+    /**
+     * Returns true when a global usage limit exists and the given {@code USED} count has reached or exceeded it.
+     */
+    public boolean isExhaustedWithUsedCount(long usedCount) {
+        return maxUses != null && usedCount >= maxUses;
+    }
+
+    /**
+     * Transitions this promotion from {@link DiscountStatus#Active} to {@link DiscountStatus#Finished}.
+     * Preserves {@link DiscountStatus#Suspended} and {@link DiscountStatus#Finished} unchanged.
+     */
+    public boolean finishIfActive() {
+        if (this.status != DiscountStatus.Active) {
+            return false;
+        }
+        this.status = DiscountStatus.Finished;
+        return true;
+    }
 }

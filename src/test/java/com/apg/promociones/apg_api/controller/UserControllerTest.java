@@ -7,6 +7,7 @@ import com.apg.promociones.apg_api.security.SimulatedAuthFilter;
 import com.apg.promociones.apg_api.security.SimulatedAuthProperties;
 import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import com.apg.promociones.apg_api.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class UserControllerTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private PasswordRecoveryService passwordRecoveryService;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private JwtService jwtService;
     private MockMvc mockMvc;
@@ -65,7 +69,7 @@ class UserControllerTest {
 
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new UserController(userService, authService),
-                        new AuthController(authService))
+                        new AuthController(authService, passwordRecoveryService))
                 .addFilters(new SimulatedAuthFilter(authProperties, jwtService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

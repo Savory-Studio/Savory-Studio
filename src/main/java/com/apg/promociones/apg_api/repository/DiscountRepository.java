@@ -5,6 +5,7 @@ import com.apg.promociones.apg_api.model.Discount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -41,6 +42,39 @@ public interface DiscountRepository extends JpaRepository<Discount, Integer> {
             ORDER BY d.discount_id
             """, nativeQuery = true)
     List<Discount> findActivePromotions();
+
+    /**
+     * APG-66: transitions {@code Active} promotions past {@code discount_end_timestamp} to {@code Finished}.
+     * {@code Suspended} promotions are intentionally left untouched.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE discounts
+            SET discount_status = CAST('Finished' AS discount_status_enum)
+            WHERE discount_status = CAST('Active' AS discount_status_enum)
+              AND discount_end_timestamp IS NOT NULL
+              AND discount_end_timestamp < CURRENT_TIMESTAMP
+            """, nativeQuery = true)
+    int finishExpiredPromotions();
+
+    /**
+     * APG-66: transitions {@code Active} promotions whose {@code USED} coupon count reached {@code discount_max_uses}
+     * to {@code Finished}. {@code Suspended} promotions and {@code coupon} history remain untouched.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE discounts d
+            SET discount_status = CAST('Finished' AS discount_status_enum)
+            WHERE d.discount_status = CAST('Active' AS discount_status_enum)
+              AND d.discount_max_uses IS NOT NULL
+              AND (
+                  SELECT COUNT(*)
+                  FROM coupon c
+                  WHERE c.discount_id = d.discount_id
+                    AND c.coupon_status = CAST('USED' AS coupon_status_enum)
+              ) >= d.discount_max_uses
+            """, nativeQuery = true)
+    int finishExhaustedPromotions();
 
     @Query(value = """
         SELECT EXISTS (

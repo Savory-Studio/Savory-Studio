@@ -1,7 +1,7 @@
 # REST Contract — Coupon Redemption Validation
 
-**Jira Subtask:** [BE] APG-35 · APG-38 · APG-65 · [INT] APG-71
-**Traceability:** RN-01 · RN-02 · RN-03 · RN-04 · RN-05 · CA-01 · CA-02 · CA-03
+**Jira Subtask:** [BE] APG-35 · APG-38 · APG-65 · APG-66 · [INT] APG-71
+**Traceability:** APG-9 · RF-04 · RN-01 · RN-02 · RN-03 · RN-04 · RN-05 · CA-01 · CA-02 · CA-03
 
 ---
 
@@ -43,6 +43,7 @@ relationship chain in the database.
 Side effects on success:
 - `coupon.coupon_status` transitions from `UNUSED` → `USED`
 - `coupon.coupon_redemption_timestamp` is set to the current server time
+- **APG-66 (`RF-04`):** When `discounts.discount_max_uses` is defined and the new `USED` count reaches `discount_max_uses`, `discounts.discount_status` transitions atomically from `Active` → `Finished` within the same locked transaction.
 
 ### Error Responses
 
