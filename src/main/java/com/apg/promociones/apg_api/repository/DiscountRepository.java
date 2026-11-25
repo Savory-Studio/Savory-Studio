@@ -5,6 +5,7 @@ import com.apg.promociones.apg_api.model.Discount;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -88,4 +89,9 @@ public interface DiscountRepository extends JpaRepository<Discount, Integer> {
             """, nativeQuery = true)
     List<PromotionMetricsProjection> findPromotionMetricsByRestaurantId(
             @Param("restaurantId") Integer restaurantId);
+
+    @Modifying
+    @Query(value = "UPDATE discounts SET discount_view_amount = discount_view_amount + 1 " +
+            "WHERE discount_id = :promotionId", nativeQuery = true)
+    int incrementViewCount(@Param("promotionId") Integer promotionId);
 }
