@@ -48,7 +48,7 @@ public class PromocionController {
 
         @PostMapping
         @ResponseStatus(HttpStatus.CREATED)
-        @Operation(summary = "Publish a new promotion", description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits.")
+        @Operation(summary = "Publish a new promotion", description = "Creates a promotion for a restaurant owned by the authenticated JWT user. Format, conditions and limits stay validated by RN-06, RN-07, RN-08 and RN-09.")
         @ApiResponses({
                         @ApiResponse(responseCode = "201", description = "Promotion created successfully", content = @Content(schema = @Schema(implementation = PromocionResponse.class))),
                         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

@@ -130,11 +130,12 @@ Side effects on success:
 | 400  | `startTimestamp` ≥ `endTimestamp` | "La fecha de inicio debe ser anterior a la fecha de vencimiento." | — |
 | 400  | Malformed JSON or unreadable body | "El cuerpo de la petición es inválido o está vacío." | — |
 | 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
+| 403  | Authenticated user is not `restaurants.restaurant_owner_id` for `restaurantId` | "Usuario no tiene permiso para crear promociones en este restaurante." | — |
 | 404  | `restaurantId` does not exist | "Restaurante no encontrado." | — |
 
 ### Authorization
 
-Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
+Protected — requires `Authorization: Bearer <token>` with a valid signed HS256 JWT issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` plus `X-User-Id` in local tests). The caller id comes from the JWT subject in `SecurityContext`. The request succeeds only when that id equals `restaurants.restaurant_owner_id` for `restaurantId`. Any other authenticated user receives 403 and no row is written. A request without a valid token receives 401 before any write.
 
 ### Business Rules
 
@@ -159,9 +160,12 @@ Protected — requires `Authorization: Bearer <token>` header containing a valid
 | PP-08 | startTimestamp ≥ endTimestamp | 400 Bad Request | Automated |
 | PP-09 | Non-existent restaurantId | 404 Not Found | Automated |
 | PP-10 | Malformed or empty JSON body | 400 Bad Request | Automated |
+| PP-11 | Owner publishes a valid promotion | 201 Created | Automated |
+| PP-12 | Authenticated user is not the restaurant owner | 403 Forbidden, no write | Automated |
+| PP-13 | Anonymous request without Bearer token | 401 Unauthorized | Automated |
 
 ### Data Model Dependencies
 
 This contract operates on:
 - `discounts` (all columns — this is the target table for insertion and active catalog queries)
-- `restaurants` (restaurant_id — validated via `restaurantId` in request)
+- `restaurants` (`restaurant_id` and `restaurant_owner_id` — the restaurant must exist and belong to the authenticated user)

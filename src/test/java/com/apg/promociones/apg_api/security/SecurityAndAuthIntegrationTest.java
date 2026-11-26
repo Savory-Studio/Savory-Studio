@@ -28,6 +28,7 @@ import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.CanjeService;
 import com.apg.promociones.apg_api.service.CouponQrService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import com.apg.promociones.apg_api.service.PromocionService;
 import com.apg.promociones.apg_api.util.QrCodeGenerator;
 import io.jsonwebtoken.Jwts;
@@ -61,6 +62,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -90,6 +92,9 @@ class SecurityAndAuthIntegrationTest {
     @Mock
     private AssociatePromotionService associatePromotionService;
 
+    @Mock
+    private PasswordRecoveryService passwordRecoveryService;
+
     private PasswordEncoder passwordEncoder;
     private JwtService jwtService;
     private AuthService authService;
@@ -117,7 +122,7 @@ class SecurityAndAuthIntegrationTest {
 
         authFilter = new SimulatedAuthFilter(properties, jwtService);
 
-        AuthController authController = new AuthController(authService);
+        AuthController authController = new AuthController(authService, passwordRecoveryService);
         CouponQrService couponQrService = new CouponQrService(couponRepository, new QrCodeGenerator());
         CouponController couponController = new CouponController(associatePromotionService, couponQrService);
         PromocionController promocionController = new PromocionController(promocionService);
@@ -562,6 +567,32 @@ class SecurityAndAuthIntegrationTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.status").value(403))
                     .andExpect(jsonPath("$.message").value(containsString("Usuario no tiene permiso para crear promociones")));
+
+            verify(discountRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("Publishing a promotion without a Bearer token returns 401 and does not write")
+        void publishPromotion_Anonymous_Returns401() throws Exception {
+            String body = """
+                    {
+                        "restaurantId": 1,
+                        "name": "Sin sesion",
+                        "applicableProducts": "Bebidas",
+                        "type": "PERCENTAGE",
+                        "amount": 20,
+                        "maxUses": 10
+                    }
+                    """;
+
+            mockMvc.perform(post("/api/promociones")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.status").value(401));
+
+            verify(discountRepository, never()).save(any());
+            verify(restaurantRepository, never()).findById(any());
         }
 
         @Test

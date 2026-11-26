@@ -6,6 +6,7 @@ import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.PromocionExceptions.PromocionDuplicadaException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
@@ -40,14 +41,15 @@ public class PromocionService {
 
         Restaurant restaurant = restaurantRepository.findById(request.getRestaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante no encontrado."));
-      
-        // Contextual authorization: ensure authenticated user is the restaurant owner
-        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
-            Integer ownerId = restaurant.getOwner() != null ? restaurant.getOwner().getId() : null;
-            if (ownerId != null && !ownerId.equals(authUserId)) {
-                throw new AccessDeniedException("Usuario no tiene permiso para crear promociones en este restaurante.");
-            }
-        });
+
+        Integer authUserId = SecurityUtils.getCurrentUserId()
+                .orElseThrow(() -> new UnauthorizedException(
+                        "The Bearer token is missing. Send Authorization: Bearer <token>."));
+        Integer ownerId = restaurant.getOwner() != null ? restaurant.getOwner().getId() : null;
+        if (ownerId == null || !ownerId.equals(authUserId)) {
+            throw new AccessDeniedException(
+                    "Usuario no tiene permiso para crear promociones en este restaurante.");
+        }
 
         // Validación de duplicados (mismo restaurante + mismo nombre activo)
         if (discountRepository.existsActiveByRestaurantAndName(

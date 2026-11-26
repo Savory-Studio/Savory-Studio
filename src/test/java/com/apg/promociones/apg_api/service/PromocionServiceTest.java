@@ -6,9 +6,17 @@ import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountType;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
+import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
+import com.apg.promociones.apg_api.security.UserPrincipal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -24,7 +32,10 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +51,21 @@ class PromocionServiceTest {
     @InjectMocks
     private PromocionService promocionService;
 
+    private User owner;
+
+    @BeforeEach
+    void authenticateOwner() {
+        owner = User.builder().id(1).email("owner@savory.test").build();
+        UserPrincipal principal = new UserPrincipal(owner.getId(), owner.getEmail(), List.of());
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
+
     @ParameterizedTest
     @EnumSource(DiscountType.class)
     void createPersistsOnlyTheValuesForThePromotionType(DiscountType type) {
@@ -52,7 +78,8 @@ class PromocionServiceTest {
         request.setCustomerTakesAmount(2);
         request.setCustomerPaysAmount(1);
         request.setMaxUses(5);
-        when(restaurantRepository.findById(1)).thenReturn(Optional.of(Restaurant.builder().id(1).build()));
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(
+                Restaurant.builder().id(1).owner(owner).build()));
 
         promocionService.create(request);
 
@@ -120,5 +147,45 @@ class PromocionServiceTest {
 
         assertTrue(result.isEmpty());
         verify(discountRepository).findActivePromotions();
+    }
+
+    @Test
+    void rejectsPublicationWhenCallerDoesNotOwnTheRestaurant() {
+        User other = User.builder().id(99).email("other@savory.test").build();
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(
+                Restaurant.builder().id(1).owner(other).build()));
+        PromocionRequest request = validRequest();
+
+        AccessDeniedException ex = assertThrows(AccessDeniedException.class,
+                () -> promocionService.create(request));
+
+        assertEquals("Usuario no tiene permiso para crear promociones en este restaurante.", ex.getMessage());
+        verify(discountRepository, never()).save(any());
+        verify(discountRepository, never()).existsActiveByRestaurantAndName(any(), any(), any());
+    }
+
+    @Test
+    void rejectsPublicationWhenCallerIsAnonymous() {
+        SecurityContextHolder.clearContext();
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(
+                Restaurant.builder().id(1).owner(owner).build()));
+        PromocionRequest request = validRequest();
+
+        UnauthorizedException ex = assertThrows(UnauthorizedException.class,
+                () -> promocionService.create(request));
+
+        assertEquals("The Bearer token is missing. Send Authorization: Bearer <token>.", ex.getMessage());
+        verify(discountRepository, never()).save(any());
+    }
+
+    private static PromocionRequest validRequest() {
+        PromocionRequest request = new PromocionRequest();
+        request.setRestaurantId(1);
+        request.setName("Lunch offer");
+        request.setApplicableProducts("Lunch");
+        request.setType(DiscountType.PERCENTAGE.name());
+        request.setAmount(BigDecimal.TEN);
+        request.setMaxUses(5);
+        return request;
     }
 }
