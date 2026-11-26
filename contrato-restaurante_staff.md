@@ -29,7 +29,7 @@ Asocia un usuario existente (con rol de empleado) a un restaurante específico.
   "assignedAt": "2026-11-18T22:28:27.034"
 }
 ```
-- **400 Bad Request:** Datos inválidos en la petición (ej. el formato del correo es inválido).
+- **400 Bad Request:** Datos inválidos en la petición (ej. `restaurantId` no positivo, formato del correo inválido, correo vacío o intento del propietario de vincularse a sí mismo como empleado).
 - **401 Unauthorized:** No hay token o es inválido.
 - **403 Forbidden:** El usuario autenticado no es el dueño de este restaurante.
 - **404 Not Found:** El restaurante no existe o no existe un usuario registrado con el correo proporcionado.
@@ -64,6 +64,7 @@ Obtiene la lista de todos los empleados vinculados a un restaurante específico.
   }
 ]
 ```
+- **400 Bad Request:** `restaurantId` inválido o no positivo.
 - **401 Unauthorized:** No hay token o es inválido.
 - **403 Forbidden:** El usuario autenticado no es el dueño de este restaurante.
 - **404 Not Found:** El restaurante no existe.
@@ -84,6 +85,7 @@ Elimina la asociación entre un empleado y un restaurante. No elimina la cuenta 
 
 ### Respuestas
 - **204 No Content:** El empleado fue desvinculado exitosamente.
+- **400 Bad Request:** `restaurantId` o `userId` inválido o no positivo.
 - **401 Unauthorized:** No hay token o es inválido.
 - **403 Forbidden:** El usuario autenticado no es el dueño de este restaurante.
 - **404 Not Found:** El restaurante no existe, o el usuario especificado no es empleado de este restaurante.

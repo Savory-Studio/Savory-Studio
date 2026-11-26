@@ -2,10 +2,12 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.CreateRestaurantRequest;
 import com.apg.promociones.apg_api.dto.CreateRestaurantResponse;
+import com.apg.promociones.apg_api.dto.RestaurantDTOs.RestaurantDetailResponse;
 import com.apg.promociones.apg_api.dto.UpdateRestaurantRequest;
 import com.apg.promociones.apg_api.dto.UpdateRestaurantResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.RestaurantStaffExceptions.PermisoDenegadoException;
 import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
@@ -20,6 +22,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -267,5 +270,85 @@ class RestaurantServiceTest {
         assertThrows(AccessDeniedException.class, () -> restaurantService.update(10, 99, updateRequest));
         verify(restaurantRepository, never()).saveAndFlush(any());
         assertEquals("La Cazuela", existing.getName());
+    }
+
+    @Test
+    void returnsOwnedRestaurantsOrderedNewestFirst() {
+        LocalDateTime olderTime = LocalDateTime.of(2026, 11, 10, 9, 0);
+        LocalDateTime newerTime = LocalDateTime.of(2026, 11, 12, 15, 0);
+        Restaurant newer = Restaurant.builder()
+                .id(12)
+                .name("Nuevo Bistro")
+                .owner(owner)
+                .description("Reciente")
+                .fullAddress("Calle 2")
+                .creationDate(newerTime)
+                .build();
+        Restaurant older = Restaurant.builder()
+                .id(10)
+                .name("Viejo Bistro")
+                .owner(owner)
+                .fullAddress("Calle 1")
+                .creationDate(olderTime)
+                .build();
+
+        when(restaurantRepository.findByOwnerIdOrderByCreationDateDesc(5)).thenReturn(List.of(newer, older));
+
+        List<RestaurantDetailResponse> result = restaurantService.getMyRestaurants(5);
+
+        assertEquals(2, result.size());
+        assertEquals(12, result.get(0).getRestaurantId());
+        assertEquals("Nuevo Bistro", result.get(0).getName());
+        assertEquals(10, result.get(1).getRestaurantId());
+    }
+
+    @Test
+    void returnsRestaurantDetailWhenRequestedByOwner() {
+        LocalDateTime created = LocalDateTime.of(2026, 11, 13, 10, 0);
+        Restaurant existing = Restaurant.builder()
+                .id(10)
+                .name("La Cazuela")
+                .owner(owner)
+                .description("Comida típica")
+                .fullAddress("Calle 45 #12-30")
+                .creationDate(created)
+                .build();
+        when(restaurantRepository.findById(10)).thenReturn(Optional.of(existing));
+
+        RestaurantDetailResponse detail = restaurantService.getById(10, 5);
+
+        assertEquals(10, detail.getRestaurantId());
+        assertEquals("La Cazuela", detail.getName());
+        assertEquals(5, detail.getOwnerId());
+        assertEquals("Comida típica", detail.getDescription());
+        assertEquals("Calle 45 #12-30", detail.getFullAddress());
+        assertEquals(created, detail.getCreationDate());
+    }
+
+    @Test
+    void throwsBadRequestWhenGetByIdReceivesNonPositiveId() {
+        assertThrows(BadRequestException.class, () -> restaurantService.getById(0, 5));
+        assertThrows(BadRequestException.class, () -> restaurantService.getById(-3, 5));
+        verifyNoInteractions(restaurantRepository);
+    }
+
+    @Test
+    void throwsPermisoDenegadoWhenGetByIdRequestedByNonOwner() {
+        Restaurant existing = Restaurant.builder()
+                .id(10)
+                .name("La Cazuela")
+                .owner(owner)
+                .fullAddress("Calle 45 #12-30")
+                .build();
+        when(restaurantRepository.findById(10)).thenReturn(Optional.of(existing));
+
+        assertThrows(PermisoDenegadoException.class, () -> restaurantService.getById(10, 99));
+    }
+
+    @Test
+    void throwsResourceNotFoundWhenGetByIdMissingRestaurant() {
+        when(restaurantRepository.findById(999)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> restaurantService.getById(999, 5));
     }
 }

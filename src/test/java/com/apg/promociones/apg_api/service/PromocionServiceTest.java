@@ -2,30 +2,44 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.PromocionRequest;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
+import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
+import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
+import com.apg.promociones.apg_api.security.UserPrincipal;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -37,8 +51,21 @@ class PromocionServiceTest {
     @Mock
     private RestaurantRepository restaurantRepository;
 
-    @InjectMocks
+    @Mock
+    private RestaurantStaffRepository restaurantStaffRepository;
+
     private PromocionService promocionService;
+
+    @BeforeEach
+    void setUp() {
+        SecurityContextHolder.clearContext();
+        promocionService = new PromocionService(discountRepository, restaurantRepository, restaurantStaffRepository);
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
+    }
 
     @ParameterizedTest
     @EnumSource(DiscountType.class)
@@ -120,5 +147,85 @@ class PromocionServiceTest {
 
         assertTrue(result.isEmpty());
         verify(discountRepository).findActivePromotions();
+    }
+
+    @Test
+    void createAllowsRestaurantOwner() {
+        authenticateAs(10, "owner@example.com");
+        Restaurant restaurant = Restaurant.builder()
+                .id(1)
+                .name("Owner Bistro")
+                .owner(User.builder().id(10).build())
+                .build();
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(restaurant));
+
+        promocionService.create(validPercentageRequest(1));
+
+        verify(discountRepository).save(any(Discount.class));
+    }
+
+    @Test
+    void createAllowsAuthorizedRestaurantStaffPerRest05() {
+        authenticateAs(25, "staff@example.com");
+        Restaurant restaurant = Restaurant.builder()
+                .id(1)
+                .name("Owner Bistro")
+                .owner(User.builder().id(10).build())
+                .build();
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(restaurant));
+        when(restaurantStaffRepository.existsByUserIdAndRestaurantId(25, 1)).thenReturn(true);
+
+        promocionService.create(validPercentageRequest(1));
+
+        verify(restaurantStaffRepository).existsByUserIdAndRestaurantId(25, 1);
+        verify(discountRepository).save(any(Discount.class));
+    }
+
+    @Test
+    void createRejectsUserWhoIsNeitherOwnerNorStaff() {
+        authenticateAs(99, "outsider@example.com");
+        Restaurant restaurant = Restaurant.builder()
+                .id(1)
+                .name("Owner Bistro")
+                .owner(User.builder().id(10).build())
+                .build();
+        when(restaurantRepository.findById(1)).thenReturn(Optional.of(restaurant));
+        when(restaurantStaffRepository.existsByUserIdAndRestaurantId(99, 1)).thenReturn(false);
+
+        assertThrows(AccessDeniedException.class, () -> promocionService.create(validPercentageRequest(1)));
+        verify(discountRepository, never()).save(any());
+    }
+
+    @Test
+    void createRejectsAuthenticatedContextWithoutResolvedUserId() {
+        authenticateAs(null, "simulated@savory.test");
+
+        assertThrows(UnauthorizedException.class, () -> promocionService.create(validPercentageRequest(1)));
+        verifyNoInteractions(restaurantRepository, restaurantStaffRepository, discountRepository);
+    }
+
+    private static void authenticateAs(Integer userId, String email) {
+        UserPrincipal principal = new UserPrincipal(
+                userId,
+                email,
+                Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                principal,
+                "token",
+                principal.getAuthorities()
+        );
+        SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    private static PromocionRequest validPercentageRequest(int restaurantId) {
+        PromocionRequest request = new PromocionRequest();
+        request.setRestaurantId(restaurantId);
+        request.setName("REST-05 Promo");
+        request.setApplicableProducts("Menu del dia");
+        request.setType(DiscountType.PERCENTAGE.name());
+        request.setAmount(new BigDecimal("15.00"));
+        request.setMaxUses(20);
+        return request;
     }
 }

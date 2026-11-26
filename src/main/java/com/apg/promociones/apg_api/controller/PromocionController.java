@@ -48,12 +48,12 @@ public class PromocionController {
 
         @PostMapping
         @ResponseStatus(HttpStatus.CREATED)
-        @Operation(summary = "Publish a new promotion", description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits.")
+        @Operation(summary = "Publish a new promotion", description = "Creates a new promotion (discount) for a restaurant, validating format, conditions and limits. Allowed for the restaurant owner or linked authorized staff (REST-05).")
         @ApiResponses({
                         @ApiResponse(responseCode = "201", description = "Promotion created successfully", content = @Content(schema = @Schema(implementation = PromocionResponse.class))),
                         @ApiResponse(responseCode = "400", description = "Validation error", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
                         @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-                        @ApiResponse(responseCode = "403", description = "Authenticated user does not own the restaurant", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+                        @ApiResponse(responseCode = "403", description = "Authenticated user is neither the restaurant owner nor authorized staff for this restaurant", content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
                         @ApiResponse(responseCode = "404", description = "Restaurant not found", content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
         })
         public PromocionResponse create(@Valid @RequestBody PromocionRequest request) {

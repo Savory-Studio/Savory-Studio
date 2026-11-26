@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class ViewCountAtomicityTest {
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.11-alpine")
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11-alpine")
             .withInitScript("sql/apg42-schema.sql");
 
     @DynamicPropertySource
