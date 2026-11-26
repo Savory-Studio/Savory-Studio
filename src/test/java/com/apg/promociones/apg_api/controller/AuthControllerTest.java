@@ -8,6 +8,7 @@ import com.apg.promociones.apg_api.security.SimulatedAuthFilter;
 import com.apg.promociones.apg_api.security.SimulatedAuthProperties;
 import com.apg.promociones.apg_api.service.AuthService;
 import com.apg.promociones.apg_api.service.LoginServices.JwtService;
+import com.apg.promociones.apg_api.service.PasswordRecovery.PasswordRecoveryService;
 import com.apg.promociones.apg_api.service.PromocionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,130 +36,134 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
 
-    private static final String JWT_SECRET = "MiClaveSuperSecretaYLoSuficientementeLargaParaHS25612345";
+        private static final String JWT_SECRET = "MiClaveSuperSecretaYLoSuficientementeLargaParaHS25612345";
 
-    @Mock
-    private UserRepository userRepository;
+        @Mock
+        private UserRepository userRepository;
 
-    @Mock
-    private PromocionService promocionService;
+        @Mock
+        private PromocionService promocionService;
 
-    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-    private JwtService jwtService;
-    private MockMvc mockMvc;
-    private User storedUser;
+        @Mock
+        private PasswordRecoveryService passwordRecoveryService;
 
-    @BeforeEach
-    void setUp() {
-        jwtService = new JwtService(JWT_SECRET, 86_400_000L);
-        AuthService authService = new AuthService(userRepository, passwordEncoder, jwtService);
+        private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+        private JwtService jwtService;
+        private MockMvc mockMvc;
+        private User storedUser;
 
-        SimulatedAuthProperties authProperties = new SimulatedAuthProperties();
-        authProperties.setEnabled(true);
-        authProperties.setToken("fallback-test-token");
+        @BeforeEach
+        void setUp() {
+                jwtService = new JwtService(JWT_SECRET, 86_400_000L);
+                AuthService authService = new AuthService(userRepository, passwordEncoder, jwtService);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(authService),
-                        new PromocionController(promocionService))
-                .addFilters(new SimulatedAuthFilter(authProperties, jwtService))
-                .setControllerAdvice(new GlobalExceptionHandler())
-                .build();
+                SimulatedAuthProperties authProperties = new SimulatedAuthProperties();
+                authProperties.setEnabled(true);
+                authProperties.setToken("fallback-test-token");
 
-        storedUser = User.builder()
-                .id(12)
-                .firstName("Carlos")
-                .lastName("Pérez")
-                .email("carlos.perez@example.com")
-                .passwordHash(passwordEncoder.encode("Password123!"))
-                .build();
-    }
+                mockMvc = MockMvcBuilders.standaloneSetup(
+                                new AuthController(authService, passwordRecoveryService),
+                                new PromocionController(promocionService))
+                                .addFilters(new SimulatedAuthFilter(authProperties, jwtService))
+                                .setControllerAdvice(new GlobalExceptionHandler())
+                                .build();
 
-    @Test
-    void loginReturns200WithJwtTokenAndUserDetailsWhenCredentialsAreValid_CP08() throws Exception {
-        when(userRepository.findByEmail("carlos.perez@example.com")).thenReturn(Optional.of(storedUser));
+                storedUser = User.builder()
+                                .id(12)
+                                .firstName("Carlos")
+                                .lastName("Pérez")
+                                .email("carlos.perez@example.com")
+                                .passwordHash(passwordEncoder.encode("Password123!"))
+                                .build();
+        }
 
-        MvcResult result = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"carlos.perez@example.com","password":"Password123!"}
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.token").isString())
-                .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.expiresIn").value("86400 seconds"))
-                .andExpect(jsonPath("$.userId").value(12))
-                .andExpect(jsonPath("$.email").value("carlos.perez@example.com"))
-                .andExpect(jsonPath("$.firstName").value("Carlos"))
-                .andExpect(jsonPath("$.lastName").value("Pérez"))
-                .andExpect(jsonPath("$.message").value("Authentication successful."))
-                .andReturn();
+        @Test
+        void loginReturns200WithJwtTokenAndUserDetailsWhenCredentialsAreValid_CP08() throws Exception {
+                when(userRepository.findByEmail("carlos.perez@example.com")).thenReturn(Optional.of(storedUser));
 
-        String body = result.getResponse().getContentAsString();
-        String token = body.split("\"token\":\"")[1].split("\"")[0];
-        assertTrue(jwtService.isTokenValid(token));
+                MvcResult result = mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"carlos.perez@example.com","password":"Password123!"}
+                                                """))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.token").isString())
+                                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                                .andExpect(jsonPath("$.expiresIn").value("86400 seconds"))
+                                .andExpect(jsonPath("$.userId").value(12))
+                                .andExpect(jsonPath("$.email").value("carlos.perez@example.com"))
+                                .andExpect(jsonPath("$.firstName").value("Carlos"))
+                                .andExpect(jsonPath("$.lastName").value("Pérez"))
+                                .andExpect(jsonPath("$.message").value("Authentication successful."))
+                                .andReturn();
 
-        when(promocionService.getActivePromotions()).thenReturn(List.of(
-                ActivePromotionResponse.builder().discountId(1).name("Promo JWT").status("Active").build()));
+                String body = result.getResponse().getContentAsString();
+                String token = body.split("\"token\":\"")[1].split("\"")[0];
+                assertTrue(jwtService.isTokenValid(token));
 
-        mockMvc.perform(get("/api/promociones/activas")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].name").value("Promo JWT"));
-    }
+                when(promocionService.getActivePromotions()).thenReturn(List.of(
+                                ActivePromotionResponse.builder().discountId(1).name("Promo JWT").status("Active")
+                                                .build()));
 
-    @Test
-    void loginReturns401WithGenericMessageWhenEmailDoesNotExist_CP09() throws Exception {
-        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+                mockMvc.perform(get("/api/promociones/activas")
+                                .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$[0].name").value("Promo JWT"));
+        }
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"unknown@example.com","password":"Password123!"}
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.message").value("Invalid credentials."));
-    }
+        @Test
+        void loginReturns401WithGenericMessageWhenEmailDoesNotExist_CP09() throws Exception {
+                when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
 
-    @Test
-    void loginReturns401WithGenericMessageWhenPasswordIsIncorrect_CP10() throws Exception {
-        when(userRepository.findByEmail("carlos.perez@example.com")).thenReturn(Optional.of(storedUser));
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"unknown@example.com","password":"Password123!"}
+                                                """))
+                                .andExpect(status().isUnauthorized())
+                                .andExpect(jsonPath("$.status").value(401))
+                                .andExpect(jsonPath("$.message").value("Invalid credentials."));
+        }
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"carlos.perez@example.com","password":"WrongPassword!"}
-                                """))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.status").value(401))
-                .andExpect(jsonPath("$.message").value("Invalid credentials."));
-    }
+        @Test
+        void loginReturns401WithGenericMessageWhenPasswordIsIncorrect_CP10() throws Exception {
+                when(userRepository.findByEmail("carlos.perez@example.com")).thenReturn(Optional.of(storedUser));
 
-    @Test
-    void loginReturns400WhenRequiredFieldsAreMissingOrEmailIsInvalid_CP11() throws Exception {
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"","password":"Password123!"}
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400));
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"carlos.perez@example.com","password":"WrongPassword!"}
+                                                """))
+                                .andExpect(status().isUnauthorized())
+                                .andExpect(jsonPath("$.status").value(401))
+                                .andExpect(jsonPath("$.message").value("Invalid credentials."));
+        }
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"carlos.perez@example.com","password":""}
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400));
+        @Test
+        void loginReturns400WhenRequiredFieldsAreMissingOrEmailIsInvalid_CP11() throws Exception {
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"","password":"Password123!"}
+                                                """))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.status").value(400));
 
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"email":"not-an-email","password":"Password123!"}
-                                """))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.message").value("Invalid email format."));
-    }
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"carlos.perez@example.com","password":""}
+                                                """))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.status").value(400));
+
+                mockMvc.perform(post("/api/auth/login")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                                {"email":"not-an-email","password":"Password123!"}
+                                                """))
+                                .andExpect(status().isBadRequest())
+                                .andExpect(jsonPath("$.status").value(400))
+                                .andExpect(jsonPath("$.message").value("Invalid email format."));
+        }
 }

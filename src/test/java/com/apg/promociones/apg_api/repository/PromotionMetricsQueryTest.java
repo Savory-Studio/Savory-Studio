@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PromotionMetricsQueryTest {
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.11-alpine")
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11-alpine")
             .withInitScript("sql/apg42-schema.sql");
 
     @DynamicPropertySource
@@ -141,8 +141,7 @@ class PromotionMetricsQueryTest {
         createDiscount(restaurant2, "R2 only", "Active", 20);
         createCoupon(customerA, promo1, "USED");
 
-        List<PromotionMetricsProjection> metrics =
-                discountRepository.findPromotionMetricsByRestaurantId(restaurant1);
+        List<PromotionMetricsProjection> metrics = discountRepository.findPromotionMetricsByRestaurantId(restaurant1);
 
         assertEquals(1, metrics.size());
         assertEquals(promo1, metrics.get(0).getPromotionId());
