@@ -18,7 +18,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest(properties = {
         "spring.jpa.hibernate.ddl-auto=validate",
@@ -29,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PromotionMetricsQueryTest {
 
     @Container
-    static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17.11-alpine")
+    static final PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.11-alpine")
             .withInitScript("sql/apg42-schema.sql");
 
     @DynamicPropertySource

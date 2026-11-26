@@ -104,6 +104,8 @@ public class RestaurantController {
         return SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new UnauthorizedException(
                         "Could not identify the authenticated user."));
+    }
+
     @PatchMapping("/{restaurantId}")
     @ResponseStatus(HttpStatus.OK)
     @Operation(

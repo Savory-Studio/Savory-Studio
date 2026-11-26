@@ -1,7 +1,7 @@
 # REST Contract — Promotion Publishing & Active Catalog
 
-**Jira Subtask:** [BE] APG-22 · APG-41 · APG-43 · [INT] APG-71
-**Traceability:** RF-01 · RN-06 · RN-07 · RN-08 · RN-09
+**Jira Subtask:** [BE] APG-22 · APG-41 · APG-43 · APG-66 · [INT] APG-71
+**Traceability:** APG-9 · RF-01 · RF-04 · RN-02 · RN-03 · RN-05 · RN-06 · RN-07 · RN-08 · RN-09 · PO-01
 
 ---
 
@@ -163,5 +163,66 @@ Protected — requires `Authorization: Bearer <token>` header containing a valid
 ### Data Model Dependencies
 
 This contract operates on:
-- `discounts` (all columns — this is the target table for insertion and active catalog queries)
+- `discounts` (all columns — this is the target table for insertion, active catalog queries, and automatic `Finished` lifecycle closure)
 - `restaurants` (restaurant_id — validated via `restaurantId` in request)
+- `coupon` (`coupon_id`, `discount_id`, `coupon_status` — counted as `USED` for exhaustion checks; never mutated during promotion closure)
+
+---
+
+## Automatic Promotion Closure (`APG-66` — `RF-04`)
+
+### PO-01 Functional Equivalence & Enum Policy
+
+- Functional references to `"Inactiva"` in business documentation map directly to the existing PostgreSQL `discount_status_enum` value **`Finished`** (`DiscountStatus.Finished`).
+- No additional enum value is created in `discount_status_enum`; the existing database constraint (`Active`, `Suspended`, `Finished`) is preserved.
+- **`Suspended` preservation rule:** Only promotions currently in **`Active`** transition automatically to **`Finished`**. Promotions in `Suspended` (manually paused by the restaurant) keep their `Suspended` status.
+
+### Closure Triggers
+
+| Trigger | Component | Condition | Behavior |
+|---------|-----------|-----------|----------|
+| **Periodic background sweep** | `PromotionLifecycleScheduler` → `PromotionLifecycleService` (interval `app.promotion-lifecycle.close-interval-ms`, default `60000` ms) | `discount_status = 'Active'` and (`discount_end_timestamp < CURRENT_TIMESTAMP` or `USED` count ≥ `discount_max_uses`) | Runs without requiring HTTP traffic; updates qualifying rows from `Active` to `Finished`. |
+| **Immediate closure on last redemption** | `CanjeService.redeem` (`POST /api/canjes`) | `discount_status = 'Active'`, `discount_max_uses IS NOT NULL`, and new `USED` count equals `discount_max_uses` | Inside the same `@Transactional` `PESSIMISTIC_WRITE`-locked transaction after saving the coupon as `USED`, transitions the promotion to `Finished`. |
+
+### Guarantees & Non-Destructive History
+
+- **Coupon history preserved:** Closing a promotion updates only `discounts.discount_status` (`Active` → `Finished`). Existing `coupon` rows (`UNUSED` and `USED`), timestamps, and `coupon_hash` values are untouched so customer history (`GET /api/cupones/usuario/{userId}`) remains complete.
+- **`UNUSED` claims do not exhaust `max_uses`:** Only redeemed (`USED`) coupons count toward capacity.
+- **No subsequent redemptions accepted:** Any redemption attempt after automatic closure is rejected with `409 Conflict` (`RN-02` / `RN-05`) and leaves the database unmodified.
+
+### SQL Evidence (`DiscountRepository`)
+
+1. **Expired `Active` promotions closure (`finishExpiredPromotions`):**
+   ```sql
+   UPDATE discounts
+   SET discount_status = CAST('Finished' AS discount_status_enum)
+   WHERE discount_status = CAST('Active' AS discount_status_enum)
+     AND discount_end_timestamp IS NOT NULL
+     AND discount_end_timestamp < CURRENT_TIMESTAMP;
+   ```
+
+2. **Quota-exhausted `Active` promotions closure (`finishExhaustedPromotions`):**
+   ```sql
+   UPDATE discounts d
+   SET discount_status = CAST('Finished' AS discount_status_enum)
+   WHERE d.discount_status = CAST('Active' AS discount_status_enum)
+     AND d.discount_max_uses IS NOT NULL
+     AND (
+         SELECT COUNT(*)
+         FROM coupon c
+         WHERE c.discount_id = d.discount_id
+           AND c.coupon_status = CAST('USED' AS coupon_status_enum)
+     ) >= d.discount_max_uses;
+   ```
+
+### QA Cross-Reference (`APG-66`)
+
+| Test Case | Scenario | Expected | Status |
+|-----------|----------|----------|--------|
+| CL-01 | Expired `Active` promotion with zero HTTP requests | Background scheduler updates `discount_status` to `Finished` | Automated (`PromotionLifecycleIntegrationTest`) |
+| CL-02 | Valid future `Active` promotion | Remains `Active` after scheduler sweep | Automated (`PromotionLifecycleIntegrationTest`) |
+| CL-03 | Expired or exhausted `Suspended` promotion | Preserves `Suspended` status | Automated (`PromotionLifecycleIntegrationTest`, `PromotionLifecycleServiceTest`) |
+| CL-04 | Promotion with `UNUSED` claims >= `max_uses` (0 `USED`) | Remains `Active`; `UNUSED` coupons do not trigger closure | Automated (`PromotionLifecycleIntegrationTest`) |
+| CL-05 | Redemption of final `max_uses` slot via `POST /api/canjes` | `201 Created`; `discount_status` immediately persisted as `Finished` | Automated (`CanjeServiceTest`, `CanjeConcurrencyIntegrationTest`, `PromotionLifecycleIntegrationTest`) |
+| CL-06 | Redemption attempt after auto-closure | `409 Conflict`; `coupon` stays `UNUSED` and prior `USED` history unchanged | Automated (`PromotionLifecycleIntegrationTest`) |
+| CL-07 | Re-running closure over already `Finished` promotion | Idempotent (`0` rows modified) | Automated (`PromotionLifecycleIntegrationTest`) |

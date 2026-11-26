@@ -137,6 +137,9 @@ class CanjeConcurrencyIntegrationTest {
                 assertTrue(o.body().contains("Esta promoción se ha agotado."), o.body()));
 
         assertEquals(maxUses, usedCount("WHERE discount_id = ?", discountId));
+        assertEquals("Finished", jdbc.queryForObject(
+                "SELECT discount_status::text FROM discounts WHERE discount_id = ?",
+                String.class, discountId));
         // Rejected requests left their coupons untouched.
         assertEquals(CONCURRENT_REQUESTS - maxUses, jdbc.queryForObject("""
                 SELECT COUNT(*) FROM coupon

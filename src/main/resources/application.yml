@@ -39,6 +39,9 @@ app:
   simulated-auth:
     enabled: true
     token: ${TEST_AUTH_TOKEN:test-token}
+  promotion-lifecycle:
+    scheduling-enabled: ${PROMOTION_LIFECYCLE_SCHEDULING_ENABLED:true}
+    close-interval-ms: ${PROMOTION_LIFECYCLE_CLOSE_INTERVAL_MS:60000}
   password-reset:
     token-expiration-minutes: ${PASSWORD_RESET_EXPIRATION_MINUTES:15}
     frontend-url: ${PASSWORD_RESET_FRONTEND_URL:http://localhost:3000/reset-password}

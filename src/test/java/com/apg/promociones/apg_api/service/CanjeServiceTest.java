@@ -228,8 +228,39 @@ class CanjeServiceTest {
         stubLockedLookupById();
         when(couponRepository.countByDiscountAndStatus(discount, CouponStatus.USED)).thenReturn(9L);
         when(couponRepository.saveAndFlush(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(discountRepository.saveAndFlush(any(Discount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         assertEquals("USED", canjeService.redeem(requestById(4)).getStatus());
+        assertEquals(DiscountStatus.Finished, discount.getStatus());
+        verify(discountRepository).saveAndFlush(discount);
+    }
+
+    @Test
+    void rn05RedemptionBelowMaxUsesKeepsPromotionActive() {
+        discount.setMaxUses(10);
+        stubLockedLookupById();
+        when(couponRepository.countByDiscountAndStatus(discount, CouponStatus.USED)).thenReturn(5L);
+        when(couponRepository.saveAndFlush(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertEquals("USED", canjeService.redeem(requestById(4)).getStatus());
+        assertEquals(DiscountStatus.Active, discount.getStatus());
+        verify(discountRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void rn02RejectsFinishedExhaustedPromotionWithExhaustedMessage() {
+        discount.setStatus(DiscountStatus.Finished);
+        discount.setMaxUses(10);
+        stubLockedLookupById();
+        when(couponRepository.countByDiscountAndStatus(discount, CouponStatus.USED)).thenReturn(10L);
+
+        BusinessRuleException ex = assertThrows(BusinessRuleException.class,
+                () -> canjeService.redeem(requestById(4)));
+
+        assertEquals("Esta promoción se ha agotado.", ex.getMessage());
+        assertEquals(CouponStatus.UNUSED, coupon.getStatus());
+        verify(couponRepository, never()).saveAndFlush(any());
+        verify(discountRepository, never()).saveAndFlush(any());
     }
 
     @Test
