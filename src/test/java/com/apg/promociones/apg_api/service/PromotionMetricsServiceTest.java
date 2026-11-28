@@ -9,6 +9,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
+import com.apg.promociones.apg_api.model.Discount;
+import com.apg.promociones.apg_api.model.Restaurant;
+import com.apg.promociones.apg_api.model.User;
+import com.apg.promociones.apg_api.security.SecurityUtils;
+import org.mockito.MockedStatic;
+import org.springframework.security.access.AccessDeniedException;
+
+import java.util.Optional;
+
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.anyInt;
 
 import java.util.List;
 
@@ -116,5 +129,80 @@ class PromotionMetricsServiceTest {
             @Override public Long getTotalClaimed() { return claimed; }
             @Override public Long getTotalRedeemed() { return redeemed; }
         };
+    }
+
+    @Test
+    void getMetricsByPromotionIdReturnsMetricsForOwner() {
+        User owner = User.builder().id(10).build();
+        Restaurant restaurant = Restaurant.builder().id(5).owner(owner).build();
+        Discount discount = Discount.builder().id(1).restaurant(restaurant).build();
+        PromotionMetricsProjection p = projection(1, "Almuerzo 20% off", 5, 42, 10L, 3L);
+
+        when(discountRepository.findById(1)).thenReturn(Optional.of(discount));
+        when(discountRepository.findPromotionMetricsByPromotionId(1)).thenReturn(Optional.of(p));
+
+        try (MockedStatic<SecurityUtils> securityMock = mockStatic(SecurityUtils.class)) {
+            securityMock.when(SecurityUtils::getCurrentUserId).thenReturn(Optional.of(10));
+
+            PromotionMetricsResponse result = service.getMetricsByPromotionId(1);
+
+            assertEquals(1, result.getPromotionId());
+            assertEquals("Almuerzo 20% off", result.getPromotionName());
+            assertEquals(5, result.getRestaurantId());
+            assertEquals(42, result.getViewCount());
+            assertEquals(10L, result.getTotalClaimed());
+            assertEquals(3L, result.getTotalRedeemed());
+            verify(discountRepository).findById(1);
+            verify(discountRepository).findPromotionMetricsByPromotionId(1);
+            verifyNoMoreInteractions(discountRepository);
+        }
+    }
+
+    @Test
+    void getMetricsByPromotionIdThrows403WhenUserIsNotOwner() {
+        User owner = User.builder().id(10).build();
+        Restaurant restaurant = Restaurant.builder().id(5).owner(owner).build();
+        Discount discount = Discount.builder().id(1).restaurant(restaurant).build();
+
+        when(discountRepository.findById(1)).thenReturn(Optional.of(discount));
+
+        try (MockedStatic<SecurityUtils> securityMock = mockStatic(SecurityUtils.class)) {
+            securityMock.when(SecurityUtils::getCurrentUserId).thenReturn(Optional.of(99));
+
+            assertThrows(
+                    AccessDeniedException.class,
+                    () -> service.getMetricsByPromotionId(1));
+
+            verify(discountRepository, never()).findPromotionMetricsByPromotionId(anyInt());
+        }
+    }
+
+    @Test
+    void getMetricsByPromotionIdThrows404WhenPromotionDoesNotExist() {
+        when(discountRepository.findById(999)).thenReturn(Optional.empty());
+
+        try (MockedStatic<SecurityUtils> securityMock = mockStatic(SecurityUtils.class)) {
+            securityMock.when(SecurityUtils::getCurrentUserId).thenReturn(Optional.of(10));
+
+            ResourceNotFoundException ex = assertThrows(
+                    ResourceNotFoundException.class,
+                    () -> service.getMetricsByPromotionId(999));
+
+            assertEquals("Promotion not found.", ex.getMessage());
+            verify(discountRepository, never()).findPromotionMetricsByPromotionId(anyInt());
+        }
+    }
+
+    @Test
+    void getMetricsByPromotionIdThrows401WhenNoAuthenticatedUser() {
+        try (MockedStatic<SecurityUtils> securityMock = mockStatic(SecurityUtils.class)) {
+            securityMock.when(SecurityUtils::getCurrentUserId).thenReturn(Optional.empty());
+
+            assertThrows(
+                    UnauthorizedException.class,
+                    () -> service.getMetricsByPromotionId(1));
+
+            verifyNoMoreInteractions(discountRepository);
+        }
     }
 }

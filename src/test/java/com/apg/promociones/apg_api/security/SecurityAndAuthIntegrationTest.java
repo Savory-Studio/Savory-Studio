@@ -4,13 +4,8 @@ import com.apg.promociones.apg_api.controller.AuthController;
 import com.apg.promociones.apg_api.controller.CanjeController;
 import com.apg.promociones.apg_api.controller.CouponController;
 import com.apg.promociones.apg_api.controller.PromocionController;
-import com.apg.promociones.apg_api.dto.ActivePromotionResponse;
 import com.apg.promociones.apg_api.dto.AssociatePromotionRequest;
 import com.apg.promociones.apg_api.dto.AssociatePromotionResponse;
-import com.apg.promociones.apg_api.dto.CanjeRequest;
-import com.apg.promociones.apg_api.dto.CanjeResponse;
-import com.apg.promociones.apg_api.dto.PromocionRequest;
-import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.GlobalExceptionHandler;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
@@ -18,7 +13,6 @@ import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.User;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
-import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
@@ -51,7 +45,6 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import javax.crypto.SecretKey;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -60,15 +53,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import com.apg.promociones.apg_api.service.PromotionMetricsService;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Security & Authentication Full Integration Tests")
@@ -128,7 +120,8 @@ class SecurityAndAuthIntegrationTest {
         AuthController authController = new AuthController(authService, passwordRecoveryService);
         CouponQrService couponQrService = new CouponQrService(couponRepository, new QrCodeGenerator());
         CouponController couponController = new CouponController(associatePromotionService, couponQrService);
-        PromocionController promocionController = new PromocionController(promocionService);
+        PromotionMetricsService promotionMetricsService = new PromotionMetricsService(discountRepository);
+        PromocionController promocionController = new PromocionController(promocionService, promotionMetricsService);
         CanjeController canjeController = new CanjeController(canjeService);
 
         mockMvc = MockMvcBuilders.standaloneSetup(authController, couponController, promocionController, canjeController)
