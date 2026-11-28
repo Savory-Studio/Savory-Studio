@@ -127,4 +127,20 @@ public interface DiscountRepository extends JpaRepository<Discount, Integer> {
     @Query(value = "UPDATE discounts SET discount_view_amount = discount_view_amount + 1 " +
             "WHERE discount_id = :promotionId", nativeQuery = true)
     int incrementViewCount(@Param("promotionId") Integer promotionId);
+
+    @Query(value = """
+            SELECT d.discount_id             AS promotionId,
+                   d.discount_name           AS promotionName,
+                   d.discount_restaurant_id  AS restaurantId,
+                   d.discount_view_amount    AS viewCount,
+                   COUNT(c.coupon_id)        AS totalClaimed,
+                   COUNT(c.coupon_id) FILTER (WHERE c.coupon_status = CAST('USED' AS coupon_status_enum))
+                                             AS totalRedeemed
+            FROM discounts d
+            LEFT JOIN coupon c ON c.discount_id = d.discount_id
+            WHERE d.discount_id = :promotionId
+            GROUP BY d.discount_id, d.discount_name, d.discount_restaurant_id, d.discount_view_amount
+            """, nativeQuery = true)
+    Optional<PromotionMetricsProjection> findPromotionMetricsByPromotionId(
+            @Param("promotionId") Integer promotionId);
 }

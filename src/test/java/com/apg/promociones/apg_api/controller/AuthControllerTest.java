@@ -22,6 +22,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import com.apg.promociones.apg_api.service.PromotionMetricsService;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @ExtendWith(MockitoExtension.class)
 class AuthControllerTest {
+    @Mock
+    private PromotionMetricsService promotionMetricsService;
 
     private static final String JWT_SECRET = "MiClaveSuperSecretaYLoSuficientementeLargaParaHS25612345";
 
@@ -63,7 +66,7 @@ class AuthControllerTest {
 
         mockMvc = MockMvcBuilders.standaloneSetup(
                         new AuthController(authService, passwordRecoveryService),
-                        new PromocionController(promocionService))
+                        new PromocionController(promocionService, promotionMetricsService))
                 .addFilters(new SimulatedAuthFilter(authProperties, jwtService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
