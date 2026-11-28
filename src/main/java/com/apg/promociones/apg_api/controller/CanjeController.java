@@ -30,7 +30,7 @@ public class CanjeController {
     @ResponseStatus(HttpStatus.CREATED)
     @Operation(
             summary = "Redeem a coupon",
-            description = "Validates business rules (status, expiration, per-user and global usage limits) and registers the coupon redemption at the restaurant by couponHash (QR UUID) or couponId."
+            description = "Validates business rules (status, expiration, per-user and global usage limits) and registers the coupon redemption at the restaurant by couponHash (QR UUID) or couponId. Allowed for the restaurant owner or linked authorized staff (CUP-04)."
     )
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Coupon redeemed successfully",
@@ -38,6 +38,8 @@ public class CanjeController {
             @ApiResponse(responseCode = "400", description = "Missing both couponId and couponHash",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "401", description = "Missing, invalid, or expired Bearer token",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "403", description = "Authenticated user is neither the restaurant owner nor authorized staff for this promotion's restaurant",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "404", description = "Coupon not found",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),

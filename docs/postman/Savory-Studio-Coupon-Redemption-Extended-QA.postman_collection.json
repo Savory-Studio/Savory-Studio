@@ -1,0 +1,1326 @@
+{
+	"info": {
+		"name": "Savory Studio – APG-74 Coupon JWT, QR, Staff Auth & Limits Extended QA",
+		"description": "Colección QA extendida para APG-74 (APG-7, APG-8, APG-9 · CUP-01 a CUP-06 · RN-01 a RN-13).\n\nAmplía APG-30 y APG-45 sin repetir sus casos básicos previos.\nCubre:\n- Reclamación autenticada por JWT (/api/coupons y /api/cupones) y protección anti-suplantación\n- Generación y acceso autorizado a código QR PNG (/api/coupons/{id}/qr y /api/cupones/{id}/qr)\n- Canje autorizado para dueño y personal vinculado por restaurante + revocación inmediata (CUP-04)\n- Límites individuales (RN-04 tras re-reclamación), agotamiento global con cierre automático a Finished (RN-05/CUP-06) e historial de cupones\n- Códigos HTTP: 201, 200, 204, 400, 401, 403, 404, 409\n\n**Nota sobre concurrencia real:** Los ataques paralelos con CountDownLatch y verificación SQL directa se ejecutan en `CouponRedemptionExtendedQaIntegrationTest` y `CanjeConcurrencyIntegrationTest`.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{ "key": "baseUrl", "value": "http://localhost:8080" },
+		{ "key": "runTag", "value": "" },
+		{ "key": "ownerAEmail", "value": "" },
+		{ "key": "ownerAToken", "value": "" },
+		{ "key": "ownerAId", "value": "" },
+		{ "key": "ownerBEmail", "value": "" },
+		{ "key": "ownerBToken", "value": "" },
+		{ "key": "ownerBId", "value": "" },
+		{ "key": "staffAEmail", "value": "" },
+		{ "key": "staffAToken", "value": "" },
+		{ "key": "staffAId", "value": "" },
+		{ "key": "customer1Email", "value": "" },
+		{ "key": "customer1Token", "value": "" },
+		{ "key": "customer1Id", "value": "" },
+		{ "key": "customer2Email", "value": "" },
+		{ "key": "customer2Token", "value": "" },
+		{ "key": "customer2Id", "value": "" },
+		{ "key": "restaurantAId", "value": "" },
+		{ "key": "restaurantBId", "value": "" },
+		{ "key": "promoMainId", "value": "" },
+		{ "key": "promoGlobalId", "value": "" },
+		{ "key": "promoBId", "value": "" },
+		{ "key": "coupon1Id", "value": "" },
+		{ "key": "coupon1Hash", "value": "" },
+		{ "key": "coupon1HashUpper", "value": "" },
+		{ "key": "coupon2Id", "value": "" },
+		{ "key": "coupon2Hash", "value": "" },
+		{ "key": "coupon3Id", "value": "" },
+		{ "key": "coupon3Hash", "value": "" },
+		{ "key": "couponBId", "value": "" },
+		{ "key": "couponBHash", "value": "" },
+		{ "key": "couponGlobalId", "value": "" },
+		{ "key": "couponGlobalHash", "value": "" }
+	],
+	"item": [
+		{
+			"name": "0 – Setup Ecosistema (Actores, Restaurantes, Staff y Promociones)",
+			"item": [
+				{
+					"name": "0.1  Registrar y autenticar OwnerA",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;",
+									"pm.collectionVariables.set('runTag', tag);",
+									"pm.collectionVariables.set('ownerAEmail', `qa74.ownera.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('ownerAId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Owner\",\n  \"lastName\": \"Uno\",\n  \"birthday\": \"1990-02-15\",\n  \"email\": \"{{ownerAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.2  Login OwnerA → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('ownerAToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{ownerAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.3  Registrar OwnerB → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('ownerBEmail', `qa74.ownerb.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('ownerBId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Owner\",\n  \"lastName\": \"Dos\",\n  \"birthday\": \"1991-04-20\",\n  \"email\": \"{{ownerBEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.4  Login OwnerB → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('ownerBToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{ownerBEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.5  Registrar StaffA → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('staffAEmail', `qa74.staffa.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('staffAId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Staff\",\n  \"lastName\": \"Uno\",\n  \"birthday\": \"1996-06-10\",\n  \"email\": \"{{staffAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.6  Login StaffA → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('staffAToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{staffAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.7  Registrar Customer1 → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('customer1Email', `qa74.cust1.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('customer1Id', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Cliente\",\n  \"lastName\": \"Uno\",\n  \"birthday\": \"1998-09-01\",\n  \"email\": \"{{customer1Email}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.8  Login Customer1 → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('customer1Token', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customer1Email}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.9  Registrar Customer2 → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('customer2Email', `qa74.cust2.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('customer2Id', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Cliente\",\n  \"lastName\": \"Dos\",\n  \"birthday\": \"1999-11-12\",\n  \"email\": \"{{customer2Email}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.10 Login Customer2 → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('customer2Token', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{customer2Email}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.11 OwnerA crea Restaurante A → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('restaurantAId', pm.response.json().restaurantId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"La Parrilla APG74 {{runTag}}\",\n  \"fullAddress\": \"Calle 45 #12-30\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.12 OwnerB crea Restaurante B → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('restaurantBId', pm.response.json().restaurantId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Sushi APG74 {{runTag}}\",\n  \"fullAddress\": \"Carrera 33 #48-15\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.13 OwnerA vincula a StaffA en Restaurante A → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{staffAEmail}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.14 OwnerA publica promoMain (maxUses=10, perUser=2) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('promoMainId', pm.response.json().discountId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo QA APG74 {{runTag}}\",\n  \"applicableProducts\": \"Platos del día\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 25.00,\n  \"maxUses\": 10,\n  \"maxUseAmountPerUser\": 2\n}"
+						}
+					}
+				},
+				{
+					"name": "0.15 OwnerA publica promoGlobal (maxUses=1) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('promoGlobalId', pm.response.json().discountId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo Cupo Unico {{runTag}}\",\n  \"applicableProducts\": \"Bebidas\",\n  \"type\": \"FIXED_VALUE\",\n  \"amount\": 5000.00,\n  \"maxUses\": 1,\n  \"maxUseAmountPerUser\": 1\n}"
+						}
+					}
+				},
+				{
+					"name": "0.16 OwnerB publica promoB en Restaurante B → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('promoBId', pm.response.json().discountId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantBId}},\n  \"name\": \"Promo Resto B {{runTag}}\",\n  \"applicableProducts\": \"Rolls\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 15.00,\n  \"maxUses\": 5\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "1 – Reclamación JWT, Alias /api/cupones y Anti-Suplantación (CUP-01, CUP-02)",
+			"item": [
+				{
+					"name": "1.1  Reclamar sin Bearer token (/api/cupones) → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.expect(pm.response.json().status).to.equal(401);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/cupones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "1.2  Reclamar con JWT manipulado (/api/coupons) → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer token.jwt.invalido" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "1.3  Anti-suplantación: Customer1 envía userId de Customer2 en body → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/cupones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": {{customer2Id}},\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "1.4  Anti-suplantación: Customer1 pide /api/cupones/usuario/Customer2 con X-User-Id falso → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" },
+							{ "key": "X-User-Id", "value": "{{customer2Id}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/cupones/usuario/{{customer2Id}}" }
+					}
+				},
+				{
+					"name": "1.5  promotionId no positivo (0) al reclamar → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": 0\n}"
+						}
+					}
+				},
+				{
+					"name": "1.6  Promoción inexistente (999999) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": 999999\n}"
+						}
+					}
+				},
+				{
+					"name": "1.7  Customer1 reclama promoMain vía alias /api/cupones sin userId en body → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.userId)).to.equal(Number(pm.collectionVariables.get('customer1Id')));",
+									"pm.expect(body.status).to.equal('UNUSED');",
+									"pm.expect(body.couponHash).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);",
+									"pm.collectionVariables.set('coupon1Id', body.couponId);",
+									"pm.collectionVariables.set('coupon1Hash', body.couponHash);",
+									"pm.collectionVariables.set('coupon1HashUpper', String(body.couponHash).toUpperCase());"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/cupones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "1.8  Reclamación duplicada mientras existe UNUSED (RN-13) → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));",
+									"pm.expect(pm.response.json().status).to.equal(409);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2 – Código QR PNG y Control de Acceso (CUP-03)",
+			"item": [
+				{
+					"name": "2.1  Customer1 obtiene QR PNG (/api/coupons/{id}/qr) → 200 image/png",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.test('Content-Type image/png y Cache-Control no-store', () => {",
+									"    pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png');",
+									"    pm.expect(pm.response.headers.get('Cache-Control')).to.include('no-store');",
+									"});",
+									"pm.test('Cuerpo binario no vacío', () => {",
+									"    pm.expect(pm.response.stream.length).to.be.above(100);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/coupons/{{coupon1Id}}/qr" }
+					}
+				},
+				{
+					"name": "2.2  Customer1 obtiene QR PNG vía alias (/api/cupones/{id}/qr) → 200 image/png",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.expect(pm.response.headers.get('Content-Type')).to.include('image/png');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/cupones/{{coupon1Id}}/qr" }
+					}
+				},
+				{
+					"name": "2.3  QR sin token Bearer → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{baseUrl}}/api/coupons/{{coupon1Id}}/qr" }
+					}
+				},
+				{
+					"name": "2.4  Customer2 intenta acceder al QR de Customer1 → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer2Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/coupons/{{coupon1Id}}/qr" }
+					}
+				},
+				{
+					"name": "2.5  OwnerA del restaurante intenta ver el QR de Customer1 → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/coupons/{{coupon1Id}}/qr" }
+					}
+				},
+				{
+					"name": "2.6  QR de cupón inexistente (999999) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/coupons/999999/qr" }
+					}
+				},
+				{
+					"name": "2.7  QR con couponId no positivo (0) → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/coupons/0/qr" }
+					}
+				}
+			]
+		},
+		{
+			"name": "3 – Autorización de Canje (Dueño vs Staff por Restaurante) y Revocación (CUP-04)",
+			"item": [
+				{
+					"name": "3.1  Customer1 reclama promoB (Restaurante B) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.collectionVariables.set('couponBId', body.couponId);",
+									"pm.collectionVariables.set('couponBHash', body.couponHash);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoBId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "3.2  Customer1 intenta auto-canjear su cupón → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon1Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.3  OwnerB intenta canjear cupón de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon1Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.4  StaffA intenta canjear cupón de Restaurante B (aislamiento) → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{couponBHash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.5  Hash UUID en mayúsculas (RN-HASH-03 case-sensitive) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon1HashUpper}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.6  StaffA vinculado canjea coupon1 por Hash (prioridad PH-05 + CUP-04) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.couponId)).to.equal(Number(pm.collectionVariables.get('coupon1Id')));",
+									"pm.expect(body.couponHash).to.equal(pm.collectionVariables.get('coupon1Hash'));",
+									"pm.expect(body.status).to.equal('USED');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponId\": 999999,\n  \"couponHash\": \"{{coupon1Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.7  Reintento de canje sobre coupon1 ya USED (RN-01) → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon1Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.8  Customer1 vuelve a reclamar promoMain tras canje (RN-13) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.collectionVariables.set('coupon2Id', body.couponId);",
+									"pm.collectionVariables.set('coupon2Hash', body.couponHash);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "3.9  OwnerA desvincula a StaffA de Restaurante A → 204",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 204 No Content', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff/{{staffAId}}" }
+					}
+				},
+				{
+					"name": "3.10 StaffA desvinculado intenta canjear coupon2 → 403 (revocación inmediata)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon2Hash}}\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4 – Límite por Usuario (RN-04), Límite Global (RN-05) e Historial",
+			"item": [
+				{
+					"name": "4.1  OwnerA canjea coupon2 (2/2 para Customer1) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.expect(pm.response.json().status).to.equal('USED');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon2Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.2  Customer1 reclama tercer cupón (coupon3) sobre promoMain → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.collectionVariables.set('coupon3Id', body.couponId);",
+									"pm.collectionVariables.set('coupon3Hash', body.couponHash);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoMainId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "4.3  OwnerA intenta canjear coupon3 excediendo RN-04 (maxPerUser=2) → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));",
+									"pm.expect(pm.response.json().message).to.include('límite');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{coupon3Hash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.4  Customer1 consulta historial (/api/cupones/usuario/id) conserva USED + UNUSED → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const list = pm.response.json();",
+									"pm.expect(list).to.be.an('array').with.lengthOf.at.least(4);",
+									"const used = list.filter(c => c.status === 'USED');",
+									"const unused = list.filter(c => c.status === 'UNUSED');",
+									"pm.expect(used.length).to.be.at.least(2);",
+									"pm.expect(unused.length).to.be.at.least(2);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/cupones/usuario/{{customer1Id}}" }
+					}
+				}
+			]
+		},
+		{
+			"name": "5 – Cierre Automático, Inmutabilidad de Historial y Bloqueo Posterior (CUP-06, RN-02, RN-10)",
+			"item": [
+				{
+					"name": "5.1  Customer2 reclama promoGlobal (maxUses=1) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.collectionVariables.set('couponGlobalId', body.couponId);",
+									"pm.collectionVariables.set('couponGlobalHash', body.couponHash);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer2Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoGlobalId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "5.2  OwnerA canjea couponGlobal (agota maxUses=1 y cierra promo a Finished) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.expect(pm.response.json().status).to.equal('USED');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{couponGlobalHash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "5.3  Customer1 intenta reclamar promoGlobal ya Finished (RN-10) → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{customer1Token}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/coupons" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"promotionId\": {{promoGlobalId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "5.4  Canje posterior sobre couponGlobal tras cierre (RN-01/RN-02) → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/canjes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"couponHash\": \"{{couponGlobalHash}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "5.5  Customer2 verifica historial intacto tras cierre a Finished → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const list = pm.response.json();",
+									"const match = list.find(c => Number(c.couponId) === Number(pm.collectionVariables.get('couponGlobalId')));",
+									"pm.expect(match).to.be.an('object');",
+									"pm.expect(match.status).to.equal('USED');",
+									"pm.expect(match.redemptionTimestamp).to.not.be.null;"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{customer2Token}}" }],
+						"url": { "raw": "{{baseUrl}}/api/cupones/usuario/{{customer2Id}}" }
+					}
+				}
+			]
+		}
+	]
+}
