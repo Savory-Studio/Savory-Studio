@@ -22,6 +22,7 @@ import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
+import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
 import com.apg.promociones.apg_api.repository.UserRepository;
 import com.apg.promociones.apg_api.service.AssociatePromotionService;
 import com.apg.promociones.apg_api.service.AuthService;
@@ -86,6 +87,9 @@ class SecurityAndAuthIntegrationTest {
     private RestaurantRepository restaurantRepository;
 
     @Mock
+    private RestaurantStaffRepository restaurantStaffRepository;
+
+    @Mock
     private CouponRepository couponRepository;
 
     @Mock
@@ -112,7 +116,7 @@ class SecurityAndAuthIntegrationTest {
         passwordEncoder = new BCryptPasswordEncoder();
         jwtService = new JwtService(JWT_SECRET, JWT_EXPIRATION_MS);
         authService = new AuthService(userRepository, passwordEncoder, jwtService);
-        promocionService = new PromocionService(discountRepository, restaurantRepository);
+        promocionService = new PromocionService(discountRepository, restaurantRepository, restaurantStaffRepository);
         canjeService = new CanjeService(couponRepository, discountRepository);
 
         SimulatedAuthProperties properties = new SimulatedAuthProperties();
@@ -566,6 +570,33 @@ class SecurityAndAuthIntegrationTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.status").value(403))
                     .andExpect(jsonPath("$.message").value(containsString("Usuario no tiene permiso para crear promociones")));
+        }
+
+        @Test
+        @DisplayName("Publishing promotion as authorized restaurant staff returns 201 Created (REST-05)")
+        void publishPromotion_AuthorizedStaff_Returns201() throws Exception {
+            String jwtUser10 = jwtService.generateToken(testUser10);
+            when(restaurantRepository.findById(2)).thenReturn(Optional.of(restaurantUser99));
+            when(restaurantStaffRepository.existsByUserIdAndRestaurantId(10, 2)).thenReturn(true);
+
+            String body = """
+                    {
+                        "restaurantId": 2,
+                        "name": "Promo Staff REST-05",
+                        "applicableProducts": "Platos",
+                        "type": "PERCENTAGE",
+                        "amount": 15,
+                        "maxUses": 50
+                    }
+                    """;
+
+            mockMvc.perform(post("/api/promociones")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUser10)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.restaurantId").value(2))
+                    .andExpect(jsonPath("$.name").value("Promo Staff REST-05"));
         }
 
         @Test

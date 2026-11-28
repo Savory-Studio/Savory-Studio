@@ -1,0 +1,1231 @@
+{
+	"info": {
+		"name": "Savory Studio – APG-73 Restaurant CRUD, Staff Auth & REST-05 QA",
+		"description": "Colección QA de integración para APG-73 (DAT-02 · AUTH-03 · REST-01 a REST-05).\n\nCubre:\n- Creación (POST /api/restaurantes), consulta (GET /api/restaurantes/mios, GET /api/restaurantes/{id}) y actualización (PATCH /api/restaurantes/{id})\n- Gestión de personal (POST, GET, DELETE /api/restaurants/{restaurantId}/staff)\n- Aislamiento entre restaurantes (OwnerA vs OwnerB vs StaffA vs Outsider)\n- Publicación de promociones autorizada por REST-05 (dueño y empleado vinculado) y revocación inmediata tras desvinculación\n- Matriz completa de respuestas HTTP: 201, 200, 204, 400, 401, 403, 404, 409\n\n**Ejecución recomendada:**\nEjecutar con Collection Runner o Newman en orden secuencial sobre `{{baseUrl}}` (por defecto `http://localhost:8080`).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{ "key": "baseUrl", "value": "http://localhost:8080" },
+		{ "key": "runTag", "value": "" },
+		{ "key": "ownerAEmail", "value": "" },
+		{ "key": "ownerAToken", "value": "" },
+		{ "key": "ownerAId", "value": "" },
+		{ "key": "ownerBEmail", "value": "" },
+		{ "key": "ownerBToken", "value": "" },
+		{ "key": "ownerBId", "value": "" },
+		{ "key": "staffAEmail", "value": "" },
+		{ "key": "staffAToken", "value": "" },
+		{ "key": "staffAId", "value": "" },
+		{ "key": "outsiderEmail", "value": "" },
+		{ "key": "outsiderToken", "value": "" },
+		{ "key": "outsiderId", "value": "" },
+		{ "key": "restaurantAId", "value": "" },
+		{ "key": "restaurantBId", "value": "" }
+	],
+	"item": [
+		{
+			"name": "0 – Setup Actores (Registro y Login JWT)",
+			"item": [
+				{
+					"name": "0.1  Registrar OwnerA → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;",
+									"pm.collectionVariables.set('runTag', tag);",
+									"pm.collectionVariables.set('ownerAEmail', `qa.ownera.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.collectionVariables.set('ownerAId', body.id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Owner\",\n  \"lastName\": \"Uno\",\n  \"birthday\": \"1990-03-15\",\n  \"email\": \"{{ownerAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.2  Login OwnerA → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.expect(body).to.have.property('token');",
+									"pm.collectionVariables.set('ownerAToken', body.token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{ownerAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.3  Registrar OwnerB → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('ownerBEmail', `qa.ownerb.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('ownerBId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Owner\",\n  \"lastName\": \"Dos\",\n  \"birthday\": \"1992-07-20\",\n  \"email\": \"{{ownerBEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.4  Login OwnerB → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('ownerBToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{ownerBEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.5  Registrar StaffA → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('staffAEmail', `qa.staffa.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('staffAId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Staff\",\n  \"lastName\": \"Uno\",\n  \"birthday\": \"1998-01-12\",\n  \"email\": \"{{staffAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.6  Login StaffA → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('staffAToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{staffAEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.7  Registrar Outsider → 201",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"const tag = pm.collectionVariables.get('runTag') || `${Date.now()}`;",
+									"pm.collectionVariables.set('outsiderEmail', `qa.outsider.${tag}@example.com`);"
+								]
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"pm.collectionVariables.set('outsiderId', pm.response.json().id);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/register" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"Cliente\",\n  \"lastName\": \"Externo\",\n  \"birthday\": \"1999-11-05\",\n  \"email\": \"{{outsiderEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				},
+				{
+					"name": "0.8  Login Outsider → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.collectionVariables.set('outsiderToken', pm.response.json().token);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/auth/login" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{outsiderEmail}}\",\n  \"password\": \"SecureP@ss123!\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "1 – REST-01: Creación de Restaurantes",
+			"item": [
+				{
+					"name": "1.1  OwnerA crea Restaurante A (ignora spoofing X-User-Id / ownerId) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.test('Propietario derivado estrictamente del JWT', () => {",
+									"    pm.expect(Number(body.ownerId)).to.equal(Number(pm.collectionVariables.get('ownerAId')));",
+									"});",
+									"pm.test('Campos normalizados y creationDate presente', () => {",
+									"    pm.expect(body.name).to.equal('La Parrilla QA');",
+									"    pm.expect(body.fullAddress).to.equal('Calle 45 #12-30, Bucaramanga');",
+									"    pm.expect(body).to.have.property('restaurantId');",
+									"    pm.expect(body).to.have.property('creationDate');",
+									"});",
+									"pm.collectionVariables.set('restaurantAId', body.restaurantId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" },
+							{ "key": "X-User-Id", "value": "{{ownerBId}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"  La Parrilla QA  \",\n  \"description\": \"Asados al carbón\",\n  \"fullAddress\": \"  Calle 45 #12-30, Bucaramanga  \",\n  \"ownerId\": {{ownerBId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "1.2  OwnerB crea Restaurante B → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.ownerId)).to.equal(Number(pm.collectionVariables.get('ownerBId')));",
+									"pm.collectionVariables.set('restaurantBId', body.restaurantId);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Sushi Express QA\",\n  \"description\": \"Cocina japonesa\",\n  \"fullAddress\": \"Carrera 33 #48-15\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.3  Creación sin nombre obligatorio → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"   \",\n  \"fullAddress\": \"Calle 10 #20-30\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.4  Creación sin Bearer token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.expect(pm.response.json().status).to.equal(401);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Sin Auth\",\n  \"fullAddress\": \"Calle 1\"\n}"
+						}
+					}
+				},
+				{
+					"name": "1.5  Creación con token JWT inválido → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));",
+									"pm.expect(pm.response.json().status).to.equal(401);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer token.jwt.invalido" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Token Invalido\",\n  \"fullAddress\": \"Calle 1\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2 – REST-02: Consulta de Restaurantes Propios y Detalle",
+			"item": [
+				{
+					"name": "2.1  OwnerA lista mis restaurantes (/api/restaurantes/mios) → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const list = pm.response.json();",
+									"pm.expect(list).to.be.an('array').with.lengthOf.at.least(1);",
+									"const expectedOwnerId = Number(pm.collectionVariables.get('ownerAId'));",
+									"list.forEach(item => pm.expect(Number(item.ownerId)).to.equal(expectedOwnerId));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/mios" }
+					}
+				},
+				{
+					"name": "2.2  Outsider sin restaurantes lista /mios → 200 array vacío",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"pm.expect(pm.response.json()).to.be.an('array').that.is.empty;"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{outsiderToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/mios" }
+					}
+				},
+				{
+					"name": "2.3  OwnerA consulta detalle de Restaurante A → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.restaurantId)).to.equal(Number(pm.collectionVariables.get('restaurantAId')));",
+									"pm.expect(Number(body.ownerId)).to.equal(Number(pm.collectionVariables.get('ownerAId')));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" }
+					}
+				},
+				{
+					"name": "2.4  Detalle con restaurantId no positivo (0) → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/0" }
+					}
+				},
+				{
+					"name": "2.5  Consulta sin Bearer token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/mios" }
+					}
+				},
+				{
+					"name": "2.6  Detalle de restaurante inexistente (999999) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));",
+									"pm.expect(pm.response.json().status).to.equal(404);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/999999" }
+					}
+				}
+			]
+		},
+		{
+			"name": "3 – REST-03: Actualización de Restaurantes (PATCH)",
+			"item": [
+				{
+					"name": "3.1  OwnerA actualiza Restaurante A → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const body = pm.response.json();",
+									"pm.expect(body.name).to.equal('La Parrilla Gourmet QA');",
+									"pm.expect(Number(body.ownerId)).to.equal(Number(pm.collectionVariables.get('ownerAId')));",
+									"pm.expect(body.message).to.include('actualizado');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"La Parrilla Gourmet QA\",\n  \"description\": \"Cocina de autor\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.2  Intento de reasignar ownerId vía PATCH → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Hack\",\n  \"ownerId\": {{ownerBId}}\n}"
+						}
+					}
+				},
+				{
+					"name": "3.3  Body vacío {} en PATCH → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						}
+					}
+				},
+				{
+					"name": "3.4  PATCH sin Bearer token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [{ "key": "Content-Type", "value": "application/json" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Sin Auth\"\n}"
+						}
+					}
+				},
+				{
+					"name": "3.5  PATCH sobre restaurante inexistente (999999) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/999999" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"No Existe\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4 – REST-04: Gestión de Personal (Staff)",
+			"item": [
+				{
+					"name": "4.1  OwnerA vincula a StaffA en Restaurante A → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.userId)).to.equal(Number(pm.collectionVariables.get('staffAId')));",
+									"pm.expect(body.email).to.equal(pm.collectionVariables.get('staffAEmail'));",
+									"pm.expect(body).to.have.property('assignedAt');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{staffAEmail}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.2  Vinculación duplicada de StaffA → 409",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 409 Conflict', () => pm.response.to.have.status(409));",
+									"const body = pm.response.json();",
+									"pm.expect(body.status).to.equal(409);",
+									"pm.expect(body.message).to.include('ya es empleado');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{staffAEmail}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.3  Correo inválido al vincular personal → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"correo-invalido\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.4  Auto-vinculación del propietario como empleado → 400",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+									"pm.expect(pm.response.json().status).to.equal(400);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{ownerAEmail}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.5  Email no registrado al vincular personal → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));",
+									"pm.expect(pm.response.json().status).to.equal(404);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"usuario.inexistente@example.com\"\n}"
+						}
+					}
+				},
+				{
+					"name": "4.6  Listar staff sin Bearer token → 401",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" }
+					}
+				},
+				{
+					"name": "4.7  OwnerA lista personal de Restaurante A → 200",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+									"const list = pm.response.json();",
+									"pm.expect(list).to.be.an('array').with.lengthOf(1);",
+									"pm.expect(Number(list[0].userId)).to.equal(Number(pm.collectionVariables.get('staffAId')));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" }
+					}
+				}
+			]
+		},
+		{
+			"name": "5 – Aislamiento Entre Restaurantes (403 Forbidden)",
+			"item": [
+				{
+					"name": "5.1  OwnerB consulta detalle de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" }
+					}
+				},
+				{
+					"name": "5.2  OwnerB actualiza Restaurante A (PATCH) → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Secuestro OwnerB\"\n}"
+						}
+					}
+				},
+				{
+					"name": "5.3  OwnerB intenta vincular staff en Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{outsiderEmail}}\"\n}"
+						}
+					}
+				},
+				{
+					"name": "5.4  OwnerB intenta listar staff de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" }
+					}
+				},
+				{
+					"name": "5.5  OwnerB intenta desvincular staff de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerBToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff/{{staffAId}}" }
+					}
+				},
+				{
+					"name": "5.6  StaffA intenta consultar detalle administrativo de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" }
+					}
+				},
+				{
+					"name": "5.7  StaffA intenta modificar Restaurante A (PATCH) → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantAId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Modificacion No Permitida\"\n}"
+						}
+					}
+				},
+				{
+					"name": "5.8  StaffA intenta listar o gestionar staff de Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff" }
+					}
+				},
+				{
+					"name": "5.9  Outsider intenta modificar Restaurante B (PATCH) → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{outsiderToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/restaurantes/{{restaurantBId}}" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Intento Outsider\"\n}"
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6 – REST-05: Publicación de Promociones y Revocación de Staff",
+			"item": [
+				{
+					"name": "6.1  OwnerA publica promoción en Restaurante A → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.restaurantId)).to.equal(Number(pm.collectionVariables.get('restaurantAId')));",
+									"pm.expect(body.status).to.equal('Active');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo OwnerA QA\",\n  \"applicableProducts\": \"Platos del día\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 20.00,\n  \"maxUses\": 100\n}"
+						}
+					}
+				},
+				{
+					"name": "6.2  StaffA vinculado publica promoción en Restaurante A (REST-05) → 201",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 201 Created', () => pm.response.to.have.status(201));",
+									"const body = pm.response.json();",
+									"pm.expect(Number(body.restaurantId)).to.equal(Number(pm.collectionVariables.get('restaurantAId')));",
+									"pm.expect(body.status).to.equal('Active');"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo StaffA REST-05 QA\",\n  \"applicableProducts\": \"Entradas\",\n  \"type\": \"FIXED_VALUE\",\n  \"amount\": 5000.00,\n  \"maxUses\": 50\n}"
+						}
+					}
+				},
+				{
+					"name": "6.3  StaffA intenta publicar promoción en Restaurante B (aislamiento) → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantBId}},\n  \"name\": \"Promo Cruzada No Autorizada\",\n  \"applicableProducts\": \"Sushi\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 15.00,\n  \"maxUses\": 25\n}"
+						}
+					}
+				},
+				{
+					"name": "6.4  Outsider intenta publicar promoción en Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden', () => pm.response.to.have.status(403));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{outsiderToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo Outsider\",\n  \"applicableProducts\": \"Bebidas\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 10.00,\n  \"maxUses\": 10\n}"
+						}
+					}
+				},
+				{
+					"name": "6.5  Publicar promoción sobre restaurante inexistente (999999) → 404",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": 999999,\n  \"name\": \"Promo Inexistente\",\n  \"applicableProducts\": \"Todo\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 10.00,\n  \"maxUses\": 10\n}"
+						}
+					}
+				},
+				{
+					"name": "6.6  OwnerA desvincula a StaffA de Restaurante A → 204 No Content",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 204 No Content', () => pm.response.to.have.status(204));"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff/{{staffAId}}" }
+					}
+				},
+				{
+					"name": "6.7  Desvinculación repetida de StaffA → 404 Not Found",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));",
+									"pm.expect(pm.response.json().status).to.equal(404);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [{ "key": "Authorization", "value": "Bearer {{ownerAToken}}" }],
+						"url": { "raw": "{{baseUrl}}/api/restaurants/{{restaurantAId}}/staff/{{staffAId}}" }
+					}
+				},
+				{
+					"name": "6.8  StaffA desvinculado intenta publicar en Restaurante A → 403",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status 403 Forbidden (acceso revocado inmediatamente)', () => pm.response.to.have.status(403));",
+									"pm.expect(pm.response.json().status).to.equal(403);"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" },
+							{ "key": "Authorization", "value": "Bearer {{staffAToken}}" }
+						],
+						"url": { "raw": "{{baseUrl}}/api/promociones" },
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"restaurantId\": {{restaurantAId}},\n  \"name\": \"Promo Staff Desvinculado\",\n  \"applicableProducts\": \"Postres\",\n  \"type\": \"PERCENTAGE\",\n  \"amount\": 15.00,\n  \"maxUses\": 15\n}"
+						}
+					}
+				}
+			]
+		}
+	]
+}

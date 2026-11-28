@@ -35,12 +35,15 @@ public class RestaurantService {
         User owner = userRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found."));
 
+        String desc = request.getDescription();
+        String normalizedDescription = (desc == null || desc.isBlank()) ? null : desc.trim();
+
         LocalDateTime now = LocalDateTime.now();
         Restaurant restaurant = Restaurant.builder()
-                .name(request.getName())
+                .name(request.getName().trim())
                 .owner(owner)
-                .description(request.getDescription())
-                .fullAddress(request.getFullAddress())
+                .description(normalizedDescription)
+                .fullAddress(request.getFullAddress().trim())
                 .creationDate(now)
                 .build();
 
@@ -67,6 +70,10 @@ public class RestaurantService {
 
     @Transactional(readOnly = true)
     public RestaurantDetailResponse getById(Integer restaurantId, Integer currentUserId) {
+        if (restaurantId == null || restaurantId <= 0) {
+            throw new BadRequestException("The restaurantId must be a positive integer.");
+        }
+
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No se encontró el restaurante con ID: " + restaurantId));

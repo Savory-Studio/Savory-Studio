@@ -2,6 +2,7 @@ package com.apg.promociones.apg_api.service;
 
 import com.apg.promociones.apg_api.dto.RestaurantStaffDTOs.RestaurantStaffDTOs.AssignStaffRequest;
 import com.apg.promociones.apg_api.dto.RestaurantStaffDTOs.RestaurantStaffDTOs.StaffMemberResponse;
+import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.RestaurantStaffExceptions.EmpleadoYaVinculadoException;
 import com.apg.promociones.apg_api.exception.RestaurantStaffExceptions.PermisoDenegadoException;
 import com.apg.promociones.apg_api.exception.RestaurantStaffExceptions.RecursoNoEncontradoException;
@@ -12,6 +13,7 @@ import com.apg.promociones.apg_api.repository.RestaurantRepository;
 import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
 import com.apg.promociones.apg_api.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,11 +33,19 @@ public class RestaurantStaffService {
     public StaffMemberResponse assignStaff(Integer restaurantId, Integer ownerId, AssignStaffRequest request) {
         Restaurant restaurant = getRestaurantAndVerifyOwner(restaurantId, ownerId);
 
-        User employee = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe un usuario registrado con el correo: " + request.getEmail()));
+        String normalizedEmail = request.getEmail().trim();
+        User employee = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "No existe un usuario registrado con el correo: " + normalizedEmail));
+
+        if (employee.getId().equals(ownerId)) {
+            throw new BadRequestException(
+                    "El propietario del restaurante ya cuenta con permisos y no puede vincularse como empleado.");
+        }
 
         if (restaurantStaffRepository.existsByUserIdAndRestaurantId(employee.getId(), restaurantId)) {
-            throw new EmpleadoYaVinculadoException("El usuario con correo " + request.getEmail() + " ya es empleado de este restaurante.");
+            throw new EmpleadoYaVinculadoException(
+                    "El usuario con correo " + normalizedEmail + " ya es empleado de este restaurante.");
         }
 
         RestaurantStaff newStaff = RestaurantStaff.builder()
@@ -44,7 +54,12 @@ public class RestaurantStaffService {
                 .assignedAt(LocalDateTime.now())
                 .build();
 
-        restaurantStaffRepository.save(newStaff);
+        try {
+            newStaff = restaurantStaffRepository.saveAndFlush(newStaff);
+        } catch (DataIntegrityViolationException ex) {
+            throw new EmpleadoYaVinculadoException(
+                    "El usuario con correo " + normalizedEmail + " ya es empleado de este restaurante.");
+        }
 
         return StaffMemberResponse.builder()
                 .userId(employee.getId())
@@ -68,6 +83,9 @@ public class RestaurantStaffService {
 
     @Transactional
     public void removeStaff(Integer restaurantId, Integer ownerId, Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BadRequestException("El userId debe ser un entero positivo.");
+        }
         getRestaurantAndVerifyOwner(restaurantId, ownerId);
 
         RestaurantStaff staffAssignment = restaurantStaffRepository.findByUserIdAndRestaurantId(userId, restaurantId)
@@ -77,6 +95,9 @@ public class RestaurantStaffService {
     }
 
     private Restaurant getRestaurantAndVerifyOwner(Integer restaurantId, Integer currentUserId) {
+        if (restaurantId == null || restaurantId <= 0) {
+            throw new BadRequestException("El restaurantId debe ser un entero positivo.");
+        }
         Restaurant restaurant = restaurantRepository.findById(restaurantId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("No se encontró el restaurante con ID: " + restaurantId));
 

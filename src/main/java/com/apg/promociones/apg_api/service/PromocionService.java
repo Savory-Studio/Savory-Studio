@@ -6,15 +6,19 @@ import com.apg.promociones.apg_api.dto.PromocionResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.PromocionExceptions.PromocionDuplicadaException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
 import com.apg.promociones.apg_api.repository.RestaurantRepository;
+import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
 import com.apg.promociones.apg_api.security.SecurityUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,11 +26,27 @@ import java.math.BigDecimal;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class PromocionService {
 
     private final DiscountRepository discountRepository;
     private final RestaurantRepository restaurantRepository;
+    private final RestaurantStaffRepository restaurantStaffRepository;
+
+    @Autowired
+    public PromocionService(
+            DiscountRepository discountRepository,
+            RestaurantRepository restaurantRepository,
+            RestaurantStaffRepository restaurantStaffRepository) {
+        this.discountRepository = discountRepository;
+        this.restaurantRepository = restaurantRepository;
+        this.restaurantStaffRepository = restaurantStaffRepository;
+    }
+
+    public PromocionService(
+            DiscountRepository discountRepository,
+            RestaurantRepository restaurantRepository) {
+        this(discountRepository, restaurantRepository, null);
+    }
 
     @Transactional(readOnly = true)
     public List<ActivePromotionResponse> getActivePromotions() {
@@ -37,17 +57,26 @@ public class PromocionService {
 
     @Transactional
     public PromocionResponse create(PromocionRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Integer authUserId = SecurityUtils.getCurrentUserId().orElse(null);
+        if (authentication != null && authentication.isAuthenticated() && authUserId == null) {
+            throw new UnauthorizedException("Could not identify the authenticated user.");
+        }
 
         Restaurant restaurant = restaurantRepository.findById(request.getRestaurantId())
                 .orElseThrow(() -> new ResourceNotFoundException("Restaurante no encontrado."));
-      
-        // Contextual authorization: ensure authenticated user is the restaurant owner
-        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
+
+        // REST-05: allow the restaurant owner or an authorized employee in restaurant_staff
+        if (authUserId != null) {
             Integer ownerId = restaurant.getOwner() != null ? restaurant.getOwner().getId() : null;
-            if (ownerId != null && !ownerId.equals(authUserId)) {
+            boolean isOwner = ownerId != null && ownerId.equals(authUserId);
+            boolean isAuthorizedStaff = restaurant.getId() != null
+                    && restaurantStaffRepository != null
+                    && restaurantStaffRepository.existsByUserIdAndRestaurantId(authUserId, restaurant.getId());
+            if (ownerId != null && !isOwner && !isAuthorizedStaff) {
                 throw new AccessDeniedException("Usuario no tiene permiso para crear promociones en este restaurante.");
             }
-        });
+        }
 
         // Validación de duplicados (mismo restaurante + mismo nombre activo)
         if (discountRepository.existsActiveByRestaurantAndName(

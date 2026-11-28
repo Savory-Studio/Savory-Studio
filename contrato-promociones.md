@@ -130,11 +130,15 @@ Side effects on success:
 | 400  | `startTimestamp` ≥ `endTimestamp` | "La fecha de inicio debe ser anterior a la fecha de vencimiento." | — |
 | 400  | Malformed JSON or unreadable body | "El cuerpo de la petición es inválido o está vacío." | — |
 | 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
+| 403  | Authenticated user is neither the restaurant owner nor linked staff (`restaurant_staff`) | "Usuario no tiene permiso para crear promociones en este restaurante." | REST-05 |
 | 404  | `restaurantId` does not exist | "Restaurante no encontrado." | — |
 
 ### Authorization
 
-Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
+Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` with `X-User-Id` in local test environments).
+
+- **Allowed callers (`REST-05`):** The restaurant owner (`restaurants.restaurant_owner_id`) OR an employee currently linked to that restaurant in `restaurant_staff`.
+- **Cross-restaurant isolation:** Owners and staff of other restaurants receive `403 Forbidden`. Unlinking an employee via `DELETE /api/restaurants/{restaurantId}/staff/{userId}` revokes promotion publishing permission immediately.
 
 ### Business Rules
 
