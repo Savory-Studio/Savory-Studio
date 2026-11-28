@@ -51,6 +51,7 @@ Side effects on success:
 |------|----------|---------|------|
 | 400  | Neither `couponId` nor `couponHash` is provided | "Debe proporcionar couponId o couponHash." | — |
 | 401  | Missing, invalid, or expired Bearer token | "The Bearer token is missing. Send Authorization: Bearer <token>." / "The Bearer token is invalid or expired." | RN-18 |
+| 403  | Authenticated user is neither the restaurant owner nor linked staff (`restaurant_staff`) for the coupon's restaurant | "Usuario no tiene permiso para canjear cupones de este restaurante." | CUP-04 |
 | 404  | `couponHash` or `couponId` does not exist in database | "Cupón no encontrado." | — |
 | 409  | `coupon_status` is already `USED` | "Este cupón ya fue utilizado." | RN-01 |
 | 409  | `discount_status` is `Finished` or `Suspended` | "Esta promoción ya no está disponible." | RN-02 |
@@ -66,7 +67,10 @@ occur. This is verified by QA test case CP-03.
 
 ### Authorization
 
-Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` in local test environments).
+Protected — requires `Authorization: Bearer <token>` header containing a valid signed HS256 JWT token issued by `POST /api/auth/login` (or `TEST_AUTH_TOKEN` with `X-User-Id` in local test environments).
+
+- **Allowed callers (`CUP-04`):** Only the owner (`restaurants.restaurant_owner_id`) OR an employee currently linked in `restaurant_staff` for the coupon's restaurant (`discounts.discount_restaurant_id`).
+- **Cross-restaurant isolation:** Customers (including the coupon holder), owners of other restaurants, and staff of other restaurants receive `403 Forbidden`. Revoking an employee via `DELETE /api/restaurants/{restaurantId}/staff/{userId}` revokes redemption permission immediately.
 
 ### Business Rules
 

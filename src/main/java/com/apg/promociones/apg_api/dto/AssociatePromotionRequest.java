@@ -2,6 +2,7 @@ package com.apg.promociones.apg_api.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,6 +17,7 @@ public class AssociatePromotionRequest {
     private Integer userId;
 
     @NotNull(message = "The promotionId field is required.")
+    @Positive(message = "The promotionId must be a positive integer.")
     @Schema(description = "ID of the promotion (discount) to associate", example = "20", requiredMode = Schema.RequiredMode.REQUIRED)
     private Integer promotionId;
 

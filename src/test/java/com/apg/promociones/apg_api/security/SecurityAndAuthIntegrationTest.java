@@ -117,7 +117,7 @@ class SecurityAndAuthIntegrationTest {
         jwtService = new JwtService(JWT_SECRET, JWT_EXPIRATION_MS);
         authService = new AuthService(userRepository, passwordEncoder, jwtService);
         promocionService = new PromocionService(discountRepository, restaurantRepository, restaurantStaffRepository);
-        canjeService = new CanjeService(couponRepository, discountRepository);
+        canjeService = new CanjeService(couponRepository, discountRepository, restaurantStaffRepository);
 
         SimulatedAuthProperties properties = new SimulatedAuthProperties();
         properties.setEnabled(true);
@@ -661,6 +661,40 @@ class SecurityAndAuthIntegrationTest {
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.status").value(403))
                     .andExpect(jsonPath("$.message").value(containsString("Usuario no tiene permiso para canjear cupones")));
+        }
+
+        @Test
+        @DisplayName("Redeeming coupon as authorized restaurant staff returns 201 Created (CUP-04)")
+        void redeemCoupon_AuthorizedStaff_Returns201() throws Exception {
+            String jwtUser10 = jwtService.generateToken(testUser10);
+
+            Discount discount = Discount.builder()
+                    .id(10)
+                    .restaurant(restaurantUser99)
+                    .status(DiscountStatus.Active)
+                    .build();
+
+            Coupon coupon = Coupon.builder()
+                    .id(201)
+                    .couponHash("staff-hash-789")
+                    .status(CouponStatus.UNUSED)
+                    .discount(discount)
+                    .user(testUser99)
+                    .build();
+
+            when(couponRepository.findByCouponHashForUpdate("staff-hash-789")).thenReturn(Optional.of(coupon));
+            when(discountRepository.findByIdForUpdate(10)).thenReturn(Optional.of(discount));
+            when(restaurantStaffRepository.existsByUserIdAndRestaurantId(10, 2)).thenReturn(true);
+
+            mockMvc.perform(post("/api/canjes")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + jwtUser10)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"couponHash":"staff-hash-789"}
+                                    """))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.couponHash").value("staff-hash-789"))
+                    .andExpect(jsonPath("$.status").value("USED"));
         }
     }
 

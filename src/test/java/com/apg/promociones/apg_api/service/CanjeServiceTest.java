@@ -5,6 +5,7 @@ import com.apg.promociones.apg_api.dto.CanjeResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.Restaurant;
@@ -14,17 +15,18 @@ import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountType;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
+import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
 import com.apg.promociones.apg_api.security.UserPrincipal;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
@@ -49,7 +51,9 @@ class CanjeServiceTest {
     @Mock
     private DiscountRepository discountRepository;
 
-    @InjectMocks
+    @Mock
+    private RestaurantStaffRepository restaurantStaffRepository;
+
     private CanjeService canjeService;
 
     private User owner;
@@ -59,6 +63,8 @@ class CanjeServiceTest {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.clearContext();
+        canjeService = new CanjeService(couponRepository, discountRepository, restaurantStaffRepository);
         owner = User.builder().id(1).firstName("Owner").lastName("Test").build();
         customer = User.builder().id(10).firstName("Ana").lastName("Perez").build();
         Restaurant restaurant = Restaurant.builder().id(1).name("Savory Grill").owner(owner).build();
@@ -264,9 +270,10 @@ class CanjeServiceTest {
     }
 
     @Test
-    void contextualAuthorizationRejectsUserWhoDoesNotOwnTheRestaurant() {
+    void contextualAuthorizationRejectsUserWhoIsNeitherOwnerNorStaff() {
         authenticateAs(99);
         stubLockedLookupById();
+        when(restaurantStaffRepository.existsByUserIdAndRestaurantId(99, 1)).thenReturn(false);
 
         AccessDeniedException ex = assertThrows(AccessDeniedException.class,
                 () -> canjeService.redeem(requestById(4)));
@@ -274,6 +281,40 @@ class CanjeServiceTest {
         assertEquals("Usuario no tiene permiso para canjear cupones de este restaurante.", ex.getMessage());
         assertEquals(CouponStatus.UNUSED, coupon.getStatus());
         verify(couponRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void contextualAuthorizationAllowsLinkedRestaurantStaff_CUP04() {
+        authenticateAs(55);
+        stubLockedLookupById();
+        when(restaurantStaffRepository.existsByUserIdAndRestaurantId(55, 1)).thenReturn(true);
+        when(couponRepository.saveAndFlush(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CanjeResponse response = canjeService.redeem(requestById(4));
+
+        assertEquals("USED", response.getStatus());
+        verify(restaurantStaffRepository).existsByUserIdAndRestaurantId(55, 1);
+        verify(couponRepository).saveAndFlush(coupon);
+    }
+
+    @Test
+    void contextualAuthorizationRejectsAuthenticatedPrincipalWithoutResolvedUserId() {
+        authenticateAs(null);
+
+        assertThrows(UnauthorizedException.class, () -> canjeService.redeem(requestById(4)));
+        verify(couponRepository, never()).findByIdForUpdate(any());
+        verify(couponRepository, never()).findByCouponHashForUpdate(any());
+        verify(discountRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    void throws400WhenCouponHashIsBlankAndCouponIdIsNull() {
+        BadRequestException ex = assertThrows(BadRequestException.class,
+                () -> canjeService.redeem(new CanjeRequest(null, "   ")));
+
+        assertEquals("Debe proporcionar couponId o couponHash.", ex.getMessage());
+        verify(couponRepository, never()).findByCouponHashForUpdate(any());
+        verify(couponRepository, never()).findByIdForUpdate(any());
     }
 
     @Test
@@ -306,7 +347,10 @@ class CanjeServiceTest {
     }
 
     private static void authenticateAs(Integer userId) {
-        UserPrincipal principal = new UserPrincipal(userId, "user-" + userId + "@example.test", null);
+        UserPrincipal principal = new UserPrincipal(
+                userId,
+                "user-" + userId + "@example.test",
+                List.of(new SimpleGrantedAuthority("ROLE_USER")));
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, "token", principal.getAuthorities()));
     }

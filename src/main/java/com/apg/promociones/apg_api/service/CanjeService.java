@@ -5,26 +5,44 @@ import com.apg.promociones.apg_api.dto.CanjeResponse;
 import com.apg.promociones.apg_api.exception.BadRequestException;
 import com.apg.promociones.apg_api.exception.BusinessRuleException;
 import com.apg.promociones.apg_api.exception.ResourceNotFoundException;
+import com.apg.promociones.apg_api.exception.UnauthorizedException;
 import com.apg.promociones.apg_api.model.Coupon;
 import com.apg.promociones.apg_api.model.Discount;
 import com.apg.promociones.apg_api.model.enums.CouponStatus;
 import com.apg.promociones.apg_api.model.enums.DiscountStatus;
 import com.apg.promociones.apg_api.repository.CouponRepository;
 import com.apg.promociones.apg_api.repository.DiscountRepository;
+import com.apg.promociones.apg_api.repository.RestaurantStaffRepository;
 import com.apg.promociones.apg_api.security.SecurityUtils;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
 @Service
-@RequiredArgsConstructor
 public class CanjeService {
 
     private final CouponRepository couponRepository;
     private final DiscountRepository discountRepository;
+    private final RestaurantStaffRepository restaurantStaffRepository;
+
+    @Autowired
+    public CanjeService(
+            CouponRepository couponRepository,
+            DiscountRepository discountRepository,
+            RestaurantStaffRepository restaurantStaffRepository) {
+        this.couponRepository = couponRepository;
+        this.discountRepository = discountRepository;
+        this.restaurantStaffRepository = restaurantStaffRepository;
+    }
+
+    public CanjeService(CouponRepository couponRepository, DiscountRepository discountRepository) {
+        this(couponRepository, discountRepository, null);
+    }
 
     /**
      * Validates and processes a coupon redemption.
@@ -44,16 +62,24 @@ public class CanjeService {
      */
     @Transactional
     public CanjeResponse redeem(CanjeRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Integer authUserId = SecurityUtils.getCurrentUserId().orElse(null);
+        if (authentication != null && authentication.isAuthenticated() && authUserId == null) {
+            throw new UnauthorizedException("Could not identify the authenticated user.");
+        }
 
         // --- Validate that at least one identifier is present ---
-        if (request.getCouponHash() == null && request.getCouponId() == null) {
+        String normalizedHash = (request.getCouponHash() == null || request.getCouponHash().isBlank())
+                ? null
+                : request.getCouponHash().trim();
+        if (normalizedHash == null && request.getCouponId() == null) {
             throw new BadRequestException("Debe proporcionar couponId o couponHash.");
         }
 
         // --- Fetch and lock the coupon by hash (priority) or by ID ---
         Coupon coupon;
-        if (request.getCouponHash() != null) {
-            coupon = couponRepository.findByCouponHashForUpdate(request.getCouponHash())
+        if (normalizedHash != null) {
+            coupon = couponRepository.findByCouponHashForUpdate(normalizedHash)
                     .orElseThrow(() -> new ResourceNotFoundException("Cupón no encontrado."));
         } else {
             coupon = couponRepository.findByIdForUpdate(request.getCouponId())
@@ -64,15 +90,20 @@ public class CanjeService {
         Discount discount = discountRepository.findByIdForUpdate(coupon.getDiscount().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Promoción no encontrada."));
 
-        // --- Contextual authorization: ensure requester owns the restaurant of the discount ---
-        SecurityUtils.getCurrentUserId().ifPresent(authUserId -> {
-            if (discount.getRestaurant() != null && discount.getRestaurant().getOwner() != null) {
-                Integer ownerId = discount.getRestaurant().getOwner().getId();
-                if (!authUserId.equals(ownerId)) {
-                    throw new AccessDeniedException("Usuario no tiene permiso para canjear cupones de este restaurante.");
-                }
+        // --- Contextual authorization (CUP-04): allow restaurant owner or linked restaurant_staff ---
+        if (authUserId != null && discount.getRestaurant() != null) {
+            Integer restaurantId = discount.getRestaurant().getId();
+            Integer ownerId = discount.getRestaurant().getOwner() != null
+                    ? discount.getRestaurant().getOwner().getId()
+                    : null;
+            boolean isOwner = ownerId != null && ownerId.equals(authUserId);
+            boolean isAuthorizedStaff = restaurantId != null
+                    && restaurantStaffRepository != null
+                    && restaurantStaffRepository.existsByUserIdAndRestaurantId(authUserId, restaurantId);
+            if (ownerId != null && !isOwner && !isAuthorizedStaff) {
+                throw new AccessDeniedException("Usuario no tiene permiso para canjear cupones de este restaurante.");
             }
-        });
+        }
 
         // --- RN-01: coupon already used ---
         if (coupon.getStatus() == CouponStatus.USED) {
